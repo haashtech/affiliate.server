@@ -1,7 +1,7 @@
 import { Campaign } from "../../models/campaignSchema.js";
 import { Platform } from "../../models/platformSchema.js";
 import { Product } from "../../models/productSchema.js";
-import axios from "axios";
+import { fetchPlatformProducts } from "../../utils/fetchPlatformProducts.js";
 /**
  * @desc Get all products (optionally filtered by domain/status)
  * @route GET /api/products
@@ -229,11 +229,17 @@ export const getProductsForUsersFromDb = async (req, res) => {
     /* --------------------------------------------------
        2️⃣ FETCH EXTERNAL PRODUCTS
     -------------------------------------------------- */
-    const externalProductsResponse = await axios.get(productsUrl, {
-      withCredentials: true,
-    });
+    let externalProducts;
 
-    const externalProducts = externalProductsResponse.data || [];
+    try {
+      externalProducts = await fetchPlatformProducts(productsUrl);
+    } catch (error) {
+      const status = error.response?.status || 502;
+      return res.status(status).json({
+        message: "Failed to fetch products from store",
+        error: error.response?.data?.message || error.message,
+      });
+    }
 
     /* --------------------------------------------------
        3️⃣ FETCH LOCAL PRODUCTS

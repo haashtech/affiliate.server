@@ -60,6 +60,9 @@ const tierSchema = new mongoose.Schema(
 
     order: { type: Number, default: 1 }, // Tier sorting (Starter=1, Bronze=2...)
 
+    /** Only one per admin/platform — new affiliates start here (not latest tier). */
+    isStartingTier: { type: Boolean, default: false },
+
     levels: [tierLevelSchema], // Array of levels
   },
   { timestamps: true }

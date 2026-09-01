@@ -48,10 +48,6 @@ const notificationsSchema = new mongoose.Schema({
   },
 });
 
-// const documentSchema = new mongoose.Schema({
-//   url: { type: String, required: true },
-//   type: { type: String, required: true },
-// });
 const documentSchema = new mongoose.Schema({
   url: { type: String, required: true },
   type: { type: String, required: true },
@@ -175,12 +171,6 @@ const userSchema = new mongoose.Schema(
     otpExpiry: { type: Date },
 
     actions: {
-      // totalClicks: [
-      //   {
-      //     date: String,
-      //     clicks: Number,
-      //   },
-      // ],
       totalClicks: { type: Number, default: 0 },
       totalOrders: { type: Number, default: 0 },
       totalSales: { type: Number, default: 0 },
@@ -247,7 +237,6 @@ userSchema.pre("save", function (next) {
       user.razorpayAccounts.bank.isUpdated = true;
     }
   }
-
   next();
 });
 

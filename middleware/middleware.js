@@ -9,8 +9,8 @@ export const authenticateUser = async (req, res, next) => {
   try {
     const token =
       req.cookies?.aff_ses_server || req.headers.authorization?.split(" ")[1];
-
-    // console.log(token);
+      console.log("TOKEN:", token);
+    
 
     if (!token) {
       return res

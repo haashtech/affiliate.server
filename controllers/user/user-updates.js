@@ -1,6 +1,7 @@
 import AffUser from "../../models/aff-user.js";
 
-export const updateAffUserStatus = async (req, res) => {
+export const 
+updateAffUserStatus = async (req, res) => {
   try {
     const { userId } = req.params;
     const { status, type, commission, commissionType, tdsType, isTdsEnabled } = req.body;
@@ -85,8 +86,6 @@ export const genericUpdateAffUser = async (req, res,next) => {
 
     console.log(userId,'userId');
     console.log(updateData,'updateData');
-    
-    
 
     const updatedUser = await updateAffUser(userId, updateData);
 

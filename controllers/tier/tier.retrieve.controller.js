@@ -6,6 +6,11 @@ import { TierRewardLog } from "../../models/tier-models/tierRewardLogsSchema.js"
 import { Tier } from "../../models/tier-models/tierSystemSchema.js";
 import { UserTierProgress } from "../../models/tier-models/tierUserProgressSchema.js";
 import { BuildRedeemableRewards } from "../../services/tier/buildRewards.js";
+import {
+  getFirstActiveLevel,
+  getNextTier,
+  getStartingTier,
+} from "../../services/tier/tierQueries.js";
 import { encryptData } from "../../utils/cript-data.js";
 import { NotFoundError } from "../../utils/errors.js";
 
@@ -290,18 +295,12 @@ export const getUserTierProgressController = async (req, res, next) => {
     });
 
     if (!progress) {
-      const firstTier = await Tier.findOne({
-        adminId,
-        platformId,
-        isActive: true,
-      }).sort({ order: 1 });
+      const firstTier = await getStartingTier(adminId, platformId);
 
       // ❗ Tier missing → return empty tier progress + rewards
       if (!firstTier) return sendEmptyTierProgress();
 
-      const firstLevel =
-        firstTier.levels.find((l) => l.isActive && l.levelNumber === 1) ||
-        firstTier.levels.find((l) => l.isActive);
+      const firstLevel = getFirstActiveLevel(firstTier);
 
       // ❗ Level missing → return empty tier progress + rewards
       if (!firstLevel) return sendEmptyTierProgress();
@@ -425,26 +424,16 @@ export const getUserTierProgressController = async (req, res, next) => {
     let nextStep = { type: "", value: "" };
 
     const isLastLevel = !nextLevel;
-    const isLastTier = !(await Tier.findOne({
-      adminId,
-      platformId,
-      order: tier.order + 1,
-      isActive: true,
-    }));
+    const isLastTier = !(await getNextTier(adminId, platformId, tier.order));
 
     const allGoalsCompleted = goalData.every((g) => g.isCompleted);
 
     if (!isLastLevel) {
       nextStep = { type: "NEXT_LEVEL", value: nextLevel.levelNumber };
     } else if (!isLastTier) {
-      const nextTier = await Tier.findOne({
-        adminId,
-        platformId,
-        order: tier.order + 1,
-        isActive: true,
-      });
+      const nextTier = await getNextTier(adminId, platformId, tier.order);
 
-      nextStep = { type: "NEXT_TIER", value: nextTier.tierName };
+      nextStep = { type: "NEXT_TIER", value: nextTier?.tierName ?? "" };
     } else {
       if (allGoalsCompleted) {
         nextStep = { type: "COMPLETED_ALL", value: null };

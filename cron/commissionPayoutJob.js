@@ -111,7 +111,6 @@ cron.schedule("0 0 * * *", async () => {
     console.error("❌ Error in payout job:", err);
   }
 });
-
 // ---------- local check function ---------->
 // 🕒 Runs every 1 minute * * * * *
 

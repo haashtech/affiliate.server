@@ -4,6 +4,11 @@ import { TierRewardLog } from "../../models/tier-models/tierRewardLogsSchema.js"
 import { Tier } from "../../models/tier-models/tierSystemSchema.js";
 import { UserTierProgress } from "../../models/tier-models/tierUserProgressSchema.js";
 import { createNotification } from "../../utils/createNotification.js";
+import {
+  getFirstActiveLevel,
+  getNextTier,
+  getStartingTier,
+} from "./tierQueries.js";
 
 export default class TierProgressEngine {
   constructor({ user, adminId, platformId }) {
@@ -36,19 +41,13 @@ export default class TierProgressEngine {
       platformId: this.platformId,
     });
 
-    // First time user → assign first tier + level
+    // First time user → assign starting tier + level
     if (!doc) {
-      const firstTier = await Tier.findOne({
-        adminId: this.adminId,
-        platformId: this.platformId,
-        isActive: true,
-      }).sort({ order: 1 });
+      const firstTier = await getStartingTier(this.adminId, this.platformId);
 
       if (!firstTier) return null;
 
-      const firstLevel =
-        firstTier.levels.find((l) => l.isActive && l.levelNumber === 1) ||
-        firstTier.levels.find((l) => l.isActive);
+      const firstLevel = getFirstActiveLevel(firstTier);
 
       doc = await UserTierProgress.create({
         userId: this.user._id,
@@ -71,17 +70,14 @@ export default class TierProgressEngine {
 
       const currentOrder = currentTier?.order ?? 0;
 
-      const nextTier = await Tier.findOne({
-        adminId: this.adminId,
-        platformId: this.platformId,
-        order: { $gt: currentOrder },
-        isActive: true,
-      }).sort({ order: 1 });
+      const nextTier = await getNextTier(
+        this.adminId,
+        this.platformId,
+        currentOrder
+      );
 
       if (nextTier) {
-        const firstLevel =
-          nextTier.levels.find((l) => l.isActive && l.levelNumber === 1) ||
-          nextTier.levels.find((l) => l.isActive);
+        const firstLevel = getFirstActiveLevel(nextTier);
 
         doc.currentTierId = nextTier._id;
         doc.currentLevel = firstLevel ? firstLevel.levelNumber : 1;
@@ -419,17 +415,14 @@ export default class TierProgressEngine {
     });
 
     // Find next tier
-    const nextTier = await Tier.findOne({
-      adminId: this.adminId,
-      platformId: this.platformId,
-      order: { $gt: tier.order },
-      isActive: true,
-    }).sort({ order: 1 });
+    const nextTier = await getNextTier(
+      this.adminId,
+      this.platformId,
+      tier.order
+    );
 
     if (nextTier) {
-      const firstLevel =
-        nextTier.levels.find((l) => l.isActive && l.levelNumber === 1) ||
-        nextTier.levels.find((l) => l.isActive);
+      const firstLevel = getFirstActiveLevel(nextTier);
 
       progress.currentTierId = nextTier._id;
       progress.currentLevel = firstLevel ? firstLevel.levelNumber : 1;

@@ -10,7 +10,6 @@ export const getCurrentUsers = async (req, res, next) => {
     // console.log(req.admin, "req.admin");
     // console.log(req.user, "req.user");
 
-    // Admin case (admin making request)
     const adminId = req.admin?._id;
 
     // Normal affiliate user case (user making request)
@@ -75,129 +74,6 @@ export const getAllAffUsers = async (req, res) => {
   }
 };
 
-// =============
-// export const getAllAffUsersForEachAdmins = async (req, res) => {
-//   try {
-//     const adminId = req.admin._id || req.query.adminId; // current admin
-//     const adminType = req.admin.userType || req.query.userType; // current admin's role
-//     // console.log(adminId,'adminId');
-
-//     // Build filter object from query params
-//     const filters = {};
-//     for (const key in req.query) {
-//       if (req.query[key] && !["adminId", "userType"].includes(key)) {
-//         filters[key] = req.query[key];
-//       }
-//     }
-
-//     // ✅ Exclude the current admin from all results
-//     if (adminId) {
-//       filters._id = { $ne: adminId };
-//     }
-
-//     // ✅ Conditional logic for SUPER_ADMIN vs others
-//     if (adminType !== UserTypeEnum.SUPER_ADMIN) {
-//       // Only show users collaborating with this admin
-//       filters.collaborateWith = {
-//         $elemMatch: {
-//           accountId: adminId,
-//           status: "ACCEPTED",
-//         },
-//       };
-//     }
-
-//     // ✅ Fetch filtered users
-//     // const users = await AffUser.find(filters);
-//     let users = await AffUser.find(filters);
-
-//     // 🔥 FETCH DAILY ACTION SUMMARY FOR EACH USER
-//     const usersWithSummary = await Promise.all(
-//       users.map(async (user) => {
-//         const summary = await DailyAction.aggregate([
-//           {
-//             $match: {
-//               userId: user._id,
-//               adminId: adminId,
-//             },
-//           },
-//           {
-//             $group: {
-//               _id: null,
-//               totalClicks: { $sum: "$clicks" },
-//               totalOrders: { $sum: "$orders" },
-//               totalSales: { $sum: "$sales" },
-//               totalEarnings: { $sum: "$earnings" },
-//               totalPaidCommission: { $sum: "$paidCommission" },
-//               totalActiveCampaigns: { $sum: "$activeCampaigns" },
-//             },
-//           },
-//         ]);
-
-//         // 🔥 NEW: Total Pending Commission
-//         const pendingCommission = await Commissions.aggregate([
-//           {
-//             $match: {
-//               userId: user._id,
-//               adminId: adminId,
-//               status: "PENDING",
-//             },
-//           },
-//           {
-//             $group: {
-//               _id: null,
-//               totalPendingCommission: { $sum: "$finalCommission" },
-//             },
-//           },
-//         ]);
-
-//         // return {
-//         //   ...user.toObject(),
-//         //   summary: summary[0] || {
-//         //     totalClicks: 0,
-//         //     totalOrders: 0,
-//         //     totalSales: 0,
-//         //     totalEarnings: 0,
-//         //     totalPaidCommission: 0,
-//         //     totalActiveCampaigns: 0,
-//         //   },
-//         // };
-//         return {
-//           ...user.toObject(),
-//           summary: {
-//             ...(summary[0] || {
-//               totalClicks: 0,
-//               totalOrders: 0,
-//               totalSales: 0,
-//               totalEarnings: 0,
-//               totalPaidCommission: 0,
-//               totalActiveCampaigns: 0,
-//             }),
-
-//             // 🔥 Add Pending Commission here
-//             totalPendingCommission:
-//               pendingCommission[0]?.totalPendingCommission || 0,
-//           },
-//         };
-//       })
-//     );
-
-//     // Encrypt the data before sending
-//     const encryptedData = encryptData(usersWithSummary);
-//     // const safePayload = clean
-
-//     res.status(200).json({
-//       success: true,
-//       count: users.length,
-//       data: encryptedData,
-//     });
-//   } catch (error) {
-//     console.error("Error fetching users:", error);
-//     res.status(500).json({
-//       success: false,
-//       message: "Server error while fetching users",
-//     });
-//   }
-// };
 export const getAllAffUsersForEachAdmins = async (req, res) => {
   try {
     const adminId = req.admin?._id || req.query.adminId;
@@ -396,7 +272,7 @@ export const getAllAdminsAffUsers = async (req, res) => {
       .select(
         "_id domain avatar userName campaignAccessKey campaignId collaborateWith"
       )
-      .populate("domain", "name, url");
+      .populate("domain", "name url");
 
     return res
       .status(200)

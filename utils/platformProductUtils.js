@@ -51,8 +51,8 @@
 //   return { validProducts, blockedProducts };
 // };
 
-import axios from "axios";
 import { Product } from "../models/productSchema.js";
+import { fetchPlatformProducts } from "./fetchPlatformProducts.js";
 
 /**
  * Fetches platform products and validates product activity status.
@@ -72,8 +72,7 @@ export const getAndValidatePlatformProducts = async (
 
   let platformProducts = [];
   try {
-    const response = await axios.get(backendUrl);
-    platformProducts = response.data?.data || response.data || [];
+    platformProducts = await fetchPlatformProducts(backendUrl);
   } catch (err) {
     console.warn("⚠️ Platform fetch failed (skipped sync check):", err.message);
   }

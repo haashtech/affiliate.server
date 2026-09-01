@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 import { Tier } from "../../models/tier-models/tierSystemSchema.js";
 import { validateTierLevels } from "../../utils/validators/validateTierLevels.js";
-import { validateBodyBySchema } from "../../utils/validators/validateBody.js";
+import { promoteNewStartingTier } from "../../services/tier/tierQueries.js";
 
 // ================================================================ ///
 // ================ CREATE AFFILIATE TIER ========================= ///
@@ -50,6 +50,12 @@ export const createAffiliateTierController = async (req, res, next) => {
 
     const nextOrder = lastTier ? lastTier.order + 1 : 1;
 
+    const existingCount = await Tier.countDocuments({
+      adminId: admin._id,
+      platformId: admin.platformId,
+    });
+    const isStartingTier = existingCount === 0;
+
     // 2.. Create new tier object
     const newTier = new Tier({
       adminId: admin._id,
@@ -58,6 +64,7 @@ export const createAffiliateTierController = async (req, res, next) => {
       description: description || "",
       levels: levels,
       order: nextOrder,
+      isStartingTier,
     });
 
     // 3.. Save to database
@@ -203,6 +210,8 @@ export const deleteAffiliateTierController = async (req, res, next) => {
     }
 
     const deletedOrder = tier.order;
+    const wasStartingTier = tier.isStartingTier;
+    const platformId = tier.platformId;
 
     await Tier.deleteOne({ _id: tierId });
 
@@ -210,6 +219,10 @@ export const deleteAffiliateTierController = async (req, res, next) => {
       { adminId: admin._id, order: { $gt: deletedOrder } },
       { $inc: { order: -1 } }
     );
+
+    if (wasStartingTier) {
+      await promoteNewStartingTier(admin._id, platformId);
+    }
 
     return res.status(200).json({
       message: "Tier deleted & order rearranged",

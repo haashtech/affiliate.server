@@ -34,6 +34,20 @@ export const createCampaign = async (req, res) => {
       return res.status(401).json({ success: false, message: "Unauthorized" });
     }
 
+    if (!user.workingOn) {
+      return res.status(400).json({
+        success: false,
+        message: "Select an active company before creating a campaign",
+      });
+    }
+
+    if (accountId.toString() !== user.workingOn.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: "Campaign account must match your active company",
+      });
+    }
+
     // Generate unique key
     const campaignAccessKey = await generateUniqueCampaignAccessKey();
 
@@ -75,7 +89,7 @@ export const createCampaign = async (req, res) => {
     );
 
     // ============ Affiliate daily action ==============
-    await new DailyActionUpdater(user._id, user.workingOn)
+    await new DailyActionUpdater(user._id, accountId)
       .increment("activeCampaigns")
       .apply();
     // ============ Affiliate daily action ==============

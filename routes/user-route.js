@@ -9,7 +9,6 @@ import { registerAdmin, registerUser } from "../controllers/auth/registration.co
 import { upload } from "../middleware/upload.middleware.js";
 
 
-
 router.get("/current-admin",authenticateAdmin, getCurrentUsers);
 
 
@@ -17,9 +16,8 @@ router.get("/all",authenticateAdmin, getAllAffUsersForEachAdmins);
 router.post("/admin-login", loginAdmin);
 router.post("/user-login", loginUser);
 
-
 router.post("/admin-register", registerAdmin);
-// router.post("/user-register", registerUser);
+
 // multiple files => "documents"
 router.post(
   "/user-register",
@@ -27,23 +25,10 @@ router.post(
   registerUser
 );
 
-
-
 router.get("/all-admins",authenticateUser, getAllAdminsAffUsers);
-
-
 router.put("/update-status/:userId",authenticateAdmin, updateAffUserStatus);
-router.put("/generic-update/:userId",authenticateAdmin, genericUpdateAffUser);
+router.put("/generic-update/:userId", authenticateAdmin, genericUpdateAffUser);
 router.put("/generic-update-user/:userId",authenticateUser, genericUpdateAffUser);
-
-
-
 router.post("/logout-admin",authenticateAdmin, logoutAdmin);
-
-
-// ==== user side routes can be added here ====
-// router.get("/all",authenticateUser, getAllAffUsers);
-
-
 
 export default router;

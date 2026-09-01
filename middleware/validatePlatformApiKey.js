@@ -3,48 +3,45 @@ import { InvalidError, MissingFieldError } from "../utils/errors.js";
 
 const normalizeOrigin = (url) => {
   if (!url) return "";
-  return url.replace(/\/$/, "").toLowerCase(); // remove ending `/`
+  return String(url).trim().replace(/\/$/, "").toLowerCase();
 };
 
-// Check if origin is localhost or 127.0.0.1
 const isLocalHost = (origin) => {
   return origin.includes("localhost") || origin.includes("127.0.0.1");
 };
 
 export const validatePlatformApiKey = async (req, res, next) => {
-  console.log("inside validate Platform Api Key");
-
   try {
     const apiKey = req.headers["x-api-key"];
     const domain = req.headers["x-domain"];
     const origin = req.headers.origin;
-    console.log(apiKey,"apiKey");
-    console.log(domain,"domain");
-    console.log(origin,"origin");
 
-
-    if (!apiKey || !domain ) {
+    if (!apiKey || !domain) {
       throw new MissingFieldError("Missing headers");
     }
-    const cleanOrigin = normalizeOrigin(origin);
-    const cleanHeaderDomain = normalizeOrigin(domain);
 
-    const platform = await NpmPackage.findOne({ apiKey, domain });
+    const platform = await NpmPackage.findOne({ apiKey });
     if (!platform) {
-      throw new InvalidError("Invalid domain or apiKey");
-      // return res.status(401).json({ message: "Missing headers" });
-      // return res.status(401).json({ message: "Invalid domain or apiKey" });
+      throw new InvalidError("Invalid apiKey");
     }
-    const cleanDbDomain = normalizeOrigin(platform.domain);
 
-    // 🔥 Bypass domain validation if local development
-    if (cleanOrigin &&isLocalHost(cleanOrigin)) {
+    const cleanHeaderDomain = normalizeOrigin(domain);
+    const cleanDbDomain = normalizeOrigin(platform.domain);
+    const cleanOrigin = normalizeOrigin(origin);
+
+    if (
+      (cleanOrigin && isLocalHost(cleanOrigin)) ||
+      isLocalHost(cleanHeaderDomain)
+    ) {
       req.platform = platform;
       return next();
     }
 
-    // 🚨 ONLY MATCH IF ORIGIN === DOMAIN EXACTLY
-    if (cleanOrigin && cleanOrigin !== cleanDbDomain || cleanHeaderDomain !== cleanDbDomain) {
+    if (cleanHeaderDomain !== cleanDbDomain) {
+      throw new InvalidError("Domain mismatch");
+    }
+
+    if (cleanOrigin && cleanOrigin !== cleanDbDomain) {
       throw new InvalidError("Domain mismatch");
     }
 

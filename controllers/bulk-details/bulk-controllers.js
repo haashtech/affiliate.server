@@ -1,6 +1,7 @@
 // controllers/adminDashboardController.js
 
 import axios from "axios";
+import { fetchPlatformProducts } from "../../utils/fetchPlatformProducts.js";
 import AffUser from "../../models/aff-user.js";
 import { Campaign } from "../../models/campaignSchema.js";
 import { Commissions } from "../../models/commissionSchema.js";
@@ -67,11 +68,12 @@ export const bulkDataController = async (req, res, next) => {
     const productsUrl = platform?.backendRoutes?.products;
 
     if (productsUrl) {
-      // Fetch external products
-      const externalResponse = await axios.get(productsUrl, {
-        withCredentials: true,
-      });
-      const externalProducts = externalResponse.data || [];
+      let externalProducts = [];
+      try {
+        externalProducts = await fetchPlatformProducts(productsUrl);
+      } catch (err) {
+        console.warn("⚠️ External products fetch failed:", err.message);
+      }
 
       // Get internal products for this admin's domain
       const adminDomain = await Domains.findOne({ registeredUserId: adminId });

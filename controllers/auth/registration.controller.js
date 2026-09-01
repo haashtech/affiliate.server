@@ -36,6 +36,38 @@ const getFileType = (mimetype = "", format = "") => {
   return "other";
 };
 
+const resolveDocumentType = (mediaFile, originalFile) => {
+  const format = mediaFile?.format?.toLowerCase?.() || "";
+  if (format) return format;
+
+  const fromName = originalFile?.originalname?.split(".").pop()?.toLowerCase();
+  if (fromName) return fromName;
+
+  const mimetype = mediaFile?.mimetype || originalFile?.mimetype || "";
+  if (mimetype.includes("/")) {
+    const subtype = mimetype.split("/")[1]?.split("+")[0];
+    if (subtype) return subtype;
+  }
+
+  return "other";
+};
+
+const mapUploadedDocument = (mediaFile, originalFile) => {
+  const mimetype = mediaFile?.mimetype || originalFile?.mimetype || "";
+  const format = resolveDocumentType(mediaFile, originalFile);
+
+  return {
+    url: mediaFile.url,
+    type: format,
+    fileType: getFileType(mimetype, format),
+    thumbnail: mediaFile.thumbnail ?? null,
+    width: mediaFile.width,
+    height: mediaFile.height,
+    mimetype,
+    size: mediaFile.size ?? originalFile?.size,
+  };
+};
+
 export const registerAdmin = async (req, res) => {
   try {
     const { mobile, password, email, domain: domainUrl, type } = req.body;
@@ -320,50 +352,20 @@ export const registerUser = async (req, res) => {
       }
 
       const uploaded = mediaRes.data.files;
+      const uploadedList = Array.isArray(uploaded) ? uploaded : [uploaded];
 
-      documentsForDB = Array.isArray(uploaded)
-        ? uploaded.map((f) => ({
-            url: f.url,
-            type: f.format,
-            // 🔥 NEW FIELD
-            fileType: getFileType(f.mimetype, f.format),
-            thumbnail: f.thumbnail ?? null,
-            width: f.width,
-            height: f.height,
-            mimetype: f.mimetype,
-            size: f.size,
-          }))
-        : [
-            {
-              url: uploaded.url,
-              type: uploaded.format,
-              thumbnail: uploaded.thumbnail ?? null,
-              fileType: getFileType(uploaded.mimetype, uploaded.format),
-              width: uploaded.width,
-              height: uploaded.height,
-              mimetype: uploaded.mimetype,
-              size: uploaded.size,
-            },
-          ];
+      documentsForDB = uploadedList.map((f, idx) =>
+        mapUploadedDocument(f, files[idx])
+      );
     }
 
     /* ------------------------------------------------
-       5️⃣ Send OTP
-    ------------------------------------------------ */
-    const otp = await handleOtpSending(mobile);
-    if (!otp) {
-      return res.status(400).json({
-        message: "Invalid mobile number",
-      });
-    }
-
-    /* ------------------------------------------------
-       6️⃣ Hash password
+       5️⃣ Hash password
     ------------------------------------------------ */
     const hashedPassword = await bcrypt.hash(password, 10);
 
     /* ------------------------------------------------
-       7️⃣ Referral logic
+       6️⃣ Referral logic
     ------------------------------------------------ */
     let parentUser = null;
 
@@ -376,7 +378,7 @@ export const registerUser = async (req, res) => {
     }
 
     /* ------------------------------------------------
-       8️⃣ Create user
+       7️⃣ Create user
     ------------------------------------------------ */
     const newUser = await AffUser.create({
       userName,
@@ -384,15 +386,14 @@ export const registerUser = async (req, res) => {
       email,
       mobile,
       panNumber,
-      address,
+      address: [address],
       social,
       password: hashedPassword,
       documents: documentsForDB,
-      otp,
     });
 
     /* ------------------------------------------------
-       9️⃣ Save referral chain
+       8️⃣ Save referral chain
     ------------------------------------------------ */
     if (parentUser) {
       await Referring.create({
@@ -420,6 +421,40 @@ export const registerUser = async (req, res) => {
     });
 
     /* ------------------------------------------------
+       9️⃣ Send OTP (after user is saved)
+    ------------------------------------------------ */
+    let otp;
+    try {
+      otp = await handleOtpSending(mobile);
+      if (!otp) {
+        return res.status(400).json({
+          message:
+            "User created but OTP could not be sent. Please use resend OTP.",
+          user: {
+            id: newUser._id,
+            email: newUser.email,
+            mobile: newUser.mobile,
+          },
+        });
+      }
+
+      newUser.otp = otp;
+      await newUser.save();
+    } catch (otpErr) {
+      console.error("OTP SEND ERROR:", otpErr);
+      return res.status(400).json({
+        message:
+          otpErr.message ||
+          "User created but OTP failed to send. Please use resend OTP.",
+        user: {
+          id: newUser._id,
+          email: newUser.email,
+          mobile: newUser.mobile,
+        },
+      });
+    }
+
+    /* ------------------------------------------------
        ✅ Success
     ------------------------------------------------ */
     return res.status(201).json({
@@ -434,6 +469,7 @@ export const registerUser = async (req, res) => {
     console.error("REGISTER ERROR:", err);
     return res.status(500).json({
       message: "Internal Server Error",
+      error: err.message,
     });
   }
 };

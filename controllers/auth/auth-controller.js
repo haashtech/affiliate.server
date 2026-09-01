@@ -15,9 +15,6 @@ const JWT_SECRET_USER = process.env.JWT_SECRET_USER || "supersecretkey";
 /**
  * REGISTER USER
  */
-// import validator from "validator";
-
-
 
 /**
  * LOGIN USER
@@ -59,21 +56,14 @@ export const loginAdmin = async (req, res) => {
     const token = jwt.sign(payload, JWT_SECRET_ADMIN, { expiresIn: "7d" });
     const cookieDomain = getCookieDomain(req);
 
-    // console.log(req.headers.origin, "req.headers.origin login--------");
-
     // Set cookie
     res.cookie("aff-admin-tkn", token, {
-      // domain:process.env.NODE_ENV !== "development" &&".uracca",
-      // httpOnly: process.env.NODE_ENV !== "development",
-      // secure: process.env.NODE_ENV === "production",
-      // maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
       secure: req.headers.origin?.startsWith("https://"),
       domain: cookieDomain,
       sameSite: "Strict",
       maxAge: 30 * 24 * 60 * 60 * 1000,
     });
 
-    // Find related platform
     const platform = await Platform.findOne({
       adminId: user._id,
       domain: domain || user.domain,
@@ -115,9 +105,6 @@ export const loginUser = async (req, res, next) => {
     const isPassMatch = await bcrypt.compare(password, user.password);
     if (!isPassMatch) {
       throw new UnauthorizedError("Invalid credentials");
-      // return res
-      //   .status(401)
-      //   .json({ success: false, message: "Invalid credentials" });
     }
 
     // Generate JWT token
@@ -133,16 +120,6 @@ export const loginUser = async (req, res, next) => {
       { expiresIn: "7d" }
     );
 
-    // res.cookie("aff_ses_server", token, {
-    //   // domain:process.env.NODE_ENV !== "development" &&".uracca",
-    //   // httpOnly: process.env.NODE_ENV !== "development",
-    //   // secure: process.env.NODE_ENV === "production",
-    //   // maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    //   secure: req.headers.origin?.startsWith("https://"),
-    //   domain: cookieDomain,
-    //   sameSite: "Strict",
-    //   maxAge: 30 * 24 * 60 * 60 * 1000,
-    // });
     res.cookie("aff_ses_server", token, {
       httpOnly: true,
       secure: false, // important for IP
@@ -152,19 +129,6 @@ export const loginUser = async (req, res, next) => {
       // maxAge: 1 * 60 * 1000, // i min
     });
 
-    // Prepare cookie options
-    // const cookie = serialize("aff_ses_server", token, {
-    //   httpOnly: true,
-    //   secure: true,                // required for cross-site cookies
-    //   sameSite: "None",            // required for cross-domain
-    //   domain: ".server.uracca.com",       // FIX: cookie works across all subdomains
-    //   path: "/",
-    //   maxAge: 7 * 24 * 60 * 60,    // 7 days
-    // });
-
-    // // Set cookie in response header
-    // res.setHeader("Set-Cookie", cookie);
-
     return res.status(200).json({
       success: true,
       message: "Successfully Logged In",
@@ -173,10 +137,5 @@ export const loginUser = async (req, res, next) => {
   } catch (error) {
     console.error("Login error:", error);
     next(error);
-    // console.error("Login error:", error);
-    // return res.status(500).json({
-    //   success: false,
-    //   message: "Internal Server Error",
-    // });
   }
 };

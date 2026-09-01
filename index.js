@@ -6,7 +6,6 @@ import helmet from "helmet";
 import morgan from "morgan";
 import session from "express-session";
 import cookieSession from "cookie-session";
-
 import dotenv from "dotenv";
 import path from "path";
 import { errorHandler } from "./middleware/errorMiddleware.js";
@@ -30,9 +29,6 @@ import CommissionRouter from "./routes/commission-route.js";
 import NpmRouter from "./routes/npm-route/route.js";
 import tierRouter from "./routes/tier.route.js";
 import ticketRouter from "./routes/ticket.route.js";
-
-
-
 
 // import { createLimiter } from "./middleware/rateLimit.js";
 import { rateLimitConfig } from "./config/rateLimitConfig.js";
@@ -88,11 +84,15 @@ app.use(morgan("dev"));
 const baseOrigins = [
   "https://www.uracca.com",
   "https://uracca.com",
+  "https://www.uracca.in",
+  "https://uracca.in",
   "https://www.admin.uracca.com",
   "https://admin.uracca.com",
+  "https://www.admin.uracca.in",
+  "https://admin.uracca.in",
   "https://affiliate.uracca.com",
   "https://example.admin.uracca.in",
-  "https://example.uracca.in"
+  "https://example.uracca.in",
 ];
 
 // Parse env origins (if any)
