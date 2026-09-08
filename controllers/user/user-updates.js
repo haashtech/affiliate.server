@@ -53,7 +53,8 @@ updateAffUserStatus = async (req, res) => {
     user.status = status;
     user.affType.type = type;
     user.affType.tdsType = tdsType;
-    user.affType.isTdsEnabled = isTdsEnabled;
+    user.affType.isTdsEnabled =
+      typeof isTdsEnabled === "boolean" ? isTdsEnabled : true;
 
     // ✅ Only update commission if > 0
     if (typeof commission === "number" && commission > 0) {

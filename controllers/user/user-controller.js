@@ -261,25 +261,54 @@ export const getAllAffUsersForEachAdmins = async (req, res) => {
 // =========
 
 export const getAllAdminsAffUsers = async (req, res) => {
-  // console.log('getAllAffUsers');
-
   try {
-    // Build filter object from query params
-
     const admins = await AffUser.find({
       userType: { $in: ["ADMIN", "SUPER_ADMIN"] },
+      domain: { $ne: null },
     })
       .select(
-        "_id domain avatar userName campaignAccessKey campaignId collaborateWith"
+        "_id domain avatar userName userType status campaignAccessKey campaignId collaborateWith"
       )
-      .populate("domain", "name url");
+      .populate("domain", "name url")
+      .lean();
 
-    return res
-      .status(200)
-      .json(
-        { data: admins, message: "All Admins Fetched Successfully" },
-        { status: 200 }
-      );
+    const normalizeUrl = (url = "") =>
+      String(url)
+        .trim()
+        .toLowerCase()
+        .replace(/^https?:\/\//, "")
+        .replace(/^www\./, "")
+        .replace(/\/$/, "");
+
+    const withValidDomain = (admins || []).filter(
+      (admin) => admin?.domain && admin.domain.url
+    );
+
+    // Prefer SUPER_ADMIN / APPROVED when the same store domain appears twice
+    withValidDomain.sort((a, b) => {
+      const rank = (admin) => {
+        let score = 0;
+        if (admin.userType === "SUPER_ADMIN") score += 2;
+        if (admin.status === "APPROVED") score += 1;
+        return score;
+      };
+      return rank(b) - rank(a);
+    });
+
+    const seenDomains = new Set();
+    const uniqueAdmins = [];
+
+    for (const admin of withValidDomain) {
+      const key = normalizeUrl(admin.domain.url);
+      if (!key || seenDomains.has(key)) continue;
+      seenDomains.add(key);
+      uniqueAdmins.push(admin);
+    }
+
+    return res.status(200).json({
+      data: uniqueAdmins,
+      message: "All Admins Fetched Successfully",
+    });
   } catch (error) {
     console.error("Error fetching users:", error);
     res.status(500).json({
