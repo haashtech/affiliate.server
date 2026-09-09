@@ -12,30 +12,27 @@ updateAffUserStatus = async (req, res) => {
     //   commissionType,
     //   "status, type, commission, commissionType "
     // );
-    const validErrorStatuses = ["REJECTED", "BLOCKED","PAUSED"];
-
-    if (validErrorStatuses.includes(status)) {
-      return res
-        .status(400)
-        .json({ success: false, message: `This Account Is ${status}` });
-    }
 
     if (!status) {
       return res
         .status(400)
         .json({ success: false, message: "status is required" });
     }
-    if (type !== "INDIVIDUAL" && commission === 0) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Please Add Commission" });
-    }
+
     // ✅ validate status matches enum
     const validStatuses = ["PENDING", "APPROVED", "REJECTED", "BLOCKED"];
     if (!validStatuses.includes(status)) {
       return res
         .status(400)
         .json({ success: false, message: "Invalid status" });
+    }
+
+    // Reject/Block should not require commission; Accept still does for SPECIAL/COMPANY
+    const isNegativeStatus = status === "REJECTED" || status === "BLOCKED";
+    if (!isNegativeStatus && type !== "INDIVIDUAL" && commission === 0) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Please Add Commission" });
     }
 
     const user = await AffUser.findById(userId);

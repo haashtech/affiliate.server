@@ -1,1 +1,1 @@
-export function CancelCommission(orderId: string): Promise<any>;
+export function CancelCommission(orderId: string, productId: string): Promise<any>;

@@ -14,7 +14,7 @@ const commissionProductDetailSchema = new mongoose.Schema(
 );
 
 const commissionRecordSchema = new mongoose.Schema({
-  orderId: String,
+  orderId: { type: String, required: true },
   adminId:{ type: mongoose.Schema.Types.ObjectId, ref: "User" },
   userId:{ type: mongoose.Schema.Types.ObjectId, ref: "User" },
   campaignId: { type: mongoose.Schema.Types.ObjectId, ref: "Campaign" },
@@ -32,6 +32,8 @@ const commissionRecordSchema = new mongoose.Schema({
   },
   createdAt: { type: Date, default: Date.now },
 });
+
+commissionRecordSchema.index({ orderId: 1 }, { unique: true });
 
 export const Commissions =
   mongoose.models.Commissions ||

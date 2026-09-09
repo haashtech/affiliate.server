@@ -129,6 +129,30 @@ export const purchaseOrderWithAffiliateCampaign = async (req, res, next) => {
       );
     }
 
+    // Idempotency: same orderId must not create duplicate commission / counters
+    const existingCommission = await Commissions.findOne({ orderId });
+    if (existingCommission) {
+      return res.status(200).json({
+        message: "Commission already recorded for this order",
+        data: {
+          totalValidAmount: existingCommission.purchaseAmount,
+          commissionAmount: existingCommission.commissionAmount,
+          tdsAmount: existingCommission.tdsAmount,
+          finalCommission: existingCommission.finalCommission,
+          commissionPercent: existingCommission.commissionPercent,
+          eligibleCount: Array.isArray(existingCommission.productDetails)
+            ? existingCommission.productDetails.length
+            : 0,
+          validProducts: (existingCommission.productDetails || []).map((p) => ({
+            productId: p.productId,
+            productAmount: p.productAmount,
+          })),
+          blockedProducts: [],
+          idempotent: true,
+        },
+      });
+    }
+
     // 2️⃣ Find affiliate user
     const user = await AffUser.findOne({ referralId });
     if (!user)
@@ -161,7 +185,7 @@ export const purchaseOrderWithAffiliateCampaign = async (req, res, next) => {
     if (campaign.status !== "ACTIVE" && campaign.status !== "PAUSED") {
       throw new Error(`Campaign is ${campaign.status} and cannot be accessed`);
     }
-    
+
     // 5️⃣ Get platform info for that campaign admin
     const platform = await Platform.findOne({
       adminId: campaign.company.accountId,
@@ -270,26 +294,56 @@ export const purchaseOrderWithAffiliateCampaign = async (req, res, next) => {
     );
 
     // ----------------------------------------------------------------
-    // 🧩 Step E: Save commission record
+    // 🧩 Step E: Save commission record (unique orderId; race-safe)
     // ----------------------------------------------------------------
-    const commissionRecord = await Commissions.create({
-      orderId,
-      adminId: campaign.company.accountId,
-      userId: user._id,
-      campaignId: campaign._id,
-      commissionAmount,
-      purchaseAmount: totalValidAmount,
-      tdsAmount,
-      finalCommission,
-      commissionPercent,
-      status: campaign.status === "PAUSED" ? "HOLD" : "PENDING",
-      createdAt: new Date(),
-      productDetails: validProducts.map((p) => ({
-        productId: String(p.productId),
-        productAmount: Number(p.productAmount) || 0,
-        status: "ACTIVE",
-      })),
-    });
+    let commissionRecord;
+    try {
+      commissionRecord = await Commissions.create({
+        orderId,
+        adminId: campaign.company.accountId,
+        userId: user._id,
+        campaignId: campaign._id,
+        commissionAmount,
+        purchaseAmount: totalValidAmount,
+        tdsAmount,
+        finalCommission,
+        commissionPercent,
+        status: campaign.status === "PAUSED" ? "HOLD" : "PENDING",
+        createdAt: new Date(),
+        productDetails: validProducts.map((p) => ({
+          productId: String(p.productId),
+          productAmount: Number(p.productAmount) || 0,
+          status: "ACTIVE",
+        })),
+      });
+    } catch (createError) {
+      // Race: another request inserted the same orderId between findOne and create
+      if (createError?.code === 11000) {
+        const raced = await Commissions.findOne({ orderId });
+        if (raced) {
+          return res.status(200).json({
+            message: "Commission already recorded for this order",
+            data: {
+              totalValidAmount: raced.purchaseAmount,
+              commissionAmount: raced.commissionAmount,
+              tdsAmount: raced.tdsAmount,
+              finalCommission: raced.finalCommission,
+              commissionPercent: raced.commissionPercent,
+              eligibleCount: Array.isArray(raced.productDetails)
+                ? raced.productDetails.length
+                : 0,
+              validProducts: (raced.productDetails || []).map((p) => ({
+                productId: p.productId,
+                productAmount: p.productAmount,
+              })),
+              blockedProducts: [],
+              idempotent: true,
+            },
+          });
+        }
+      }
+      throw createError;
+    }
 
     // Update campaign stats
     campaign.commissionDetails.totalCommission += commissionAmount;

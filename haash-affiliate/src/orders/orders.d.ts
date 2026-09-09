@@ -11,4 +11,4 @@ export interface OrderCampaignProducts {
 //
 export function OrderCampaign(props: OrderCampaignProps): Promise<any>;
 
-export function CancelCommission(orderId: string): Promise<any>;
+export function CancelCommission(orderId: string, productId: string): Promise<any>;

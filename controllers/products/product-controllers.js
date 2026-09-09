@@ -241,6 +241,8 @@ export const getProductsForUsersFromDb = async (req, res) => {
       });
     }
 
+    externalProducts = Array.isArray(externalProducts) ? externalProducts : [];
+
     /* --------------------------------------------------
        3️⃣ FETCH LOCAL PRODUCTS
     -------------------------------------------------- */
@@ -251,6 +253,7 @@ export const getProductsForUsersFromDb = async (req, res) => {
 
     const localProductMap = new Map();
     localProducts.forEach((p) => {
+      if (p?.productId == null) return;
       localProductMap.set(p.productId.toString(), p);
     });
 
@@ -376,13 +379,16 @@ export const getProductsForUsersFromDb = async (req, res) => {
         status: "ACTIVE",
       });
 
-      const campaignProductIds = userCampaigns.map((c) =>
-        c.product.productId.toString()
-      );
+      const campaignProductIds = userCampaigns
+        .map((c) => c.product?.productId)
+        .filter((id) => id != null)
+        .map((id) => id.toString());
 
       products = products.map((p) => ({
         ...p,
-        campaignProduct: campaignProductIds.includes(p._id.toString()),
+        campaignProduct: p._id
+          ? campaignProductIds.includes(p._id.toString())
+          : false,
       }));
     } else {
       products = products.map((p) => ({
@@ -406,7 +412,8 @@ export const getProductsForUsersFromDb = async (req, res) => {
     console.error("Error fetching products:", error);
     return res.status(500).json({
       message: "Internal Server Error",
-      error: error.message,
+      error: error?.message || String(error),
+      name: error?.name,
     });
   }
 };
