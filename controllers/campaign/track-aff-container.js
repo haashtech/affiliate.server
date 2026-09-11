@@ -214,51 +214,53 @@ export const purchaseOrderWithAffiliateCampaign = async (req, res, next) => {
     }
 
     // ----------------------------------------------------------------
-    // 🧩 Step B: Commission eligibility logic
+    // 🧩 Step B: Commission eligibility + commission base amount
+    // ONLY_AFF_PRODUCT → campaign product line(s) only
+    // ALL_PRODUCT → all valid cart lines (campaign SKU must be present)
     // ----------------------------------------------------------------
     const campaignProductId = campaign.product?.productId?.toString();
-    let eligibleCount = 0;
-    // console.log(campaignProductId,'campaignProductId');
-    // console.log(validProducts,'validProducts');
+    const commissionType =
+      user?.affType?.commissionType || "ONLY_AFF_PRODUCT";
 
-    if (user?.affType?.commissionType === "ONLY_AFF_PRODUCT") {
+    let commissionProducts = [];
+    let commissionBaseAmount = 0;
+
+    if (commissionType === "ALL_PRODUCT") {
       const matched = validProducts.some(
         (p) => p.productId?.toString() === campaignProductId
       );
       if (!matched) {
-        // return res.status(400).json({
-        //   message: "This product is not part of the current campaign",
-        // });
-        throw new Error("This product is not part of the current campaign");
-      }
-      eligibleCount = 1;
-    } else if (user?.affType?.commissionType === "ALL_PRODUCT") {
-      const matched = validProducts.some(
-        (p) => p.productId?.toString() === campaignProductId
-      );
-      if (!matched) {
-        // return res.status(400).json({
-        //   message: "No matching campaign product found among purchased items",
-        // });
         throw new Error(
           "No matching campaign product found among purchased items"
         );
       }
-      eligibleCount = validProducts.length;
+      commissionProducts = validProducts;
+      commissionBaseAmount = totalValidAmount;
     } else {
-      eligibleCount = 1;
+      // ONLY_AFF_PRODUCT (default)
+      commissionProducts = validProducts.filter(
+        (p) => p.productId?.toString() === campaignProductId
+      );
+      if (!commissionProducts.length) {
+        throw new Error("This product is not part of the current campaign");
+      }
+      commissionBaseAmount = commissionProducts.reduce(
+        (sum, p) => sum + (Number(p.productAmount) || 0),
+        0
+      );
     }
+
+    const eligibleCount = commissionProducts.length;
 
     // ----------------------------------------------------------------
     // 🧩 Step C: Determine Commission %
     // ----------------------------------------------------------------
     let commissionPercent = 0;
-    // console.log(commissionPercent,'commissionPercent');
 
     if (user?.affType?.commission > 0) {
       commissionPercent = user.affType.commission;
     } else {
-      for (const product of validProducts) {
+      for (const product of commissionProducts) {
         if (product?.commission > 0) {
           commissionPercent = product.commission;
           break;
@@ -271,14 +273,11 @@ export const purchaseOrderWithAffiliateCampaign = async (req, res, next) => {
     }
 
     if (commissionPercent <= 0) {
-      // return res
-      //   .status(400)
-      //   .json({ message: "No commission defined for this order" });
       throw new Error("No commission defined for this order");
     }
 
-    // 🧮 Commission based on total valid product amount
-    const commissionAmount = (totalValidAmount * commissionPercent) / 100;
+    // 🧮 Commission based on scoped purchase amount (ONLY_AFF vs ALL_PRODUCT)
+    const commissionAmount = (commissionBaseAmount * commissionPercent) / 100;
 
     // ----------------------------------------------------------------
     // 🧩 Step D: Calculate TDS (Reusable Function)
@@ -304,13 +303,14 @@ export const purchaseOrderWithAffiliateCampaign = async (req, res, next) => {
         userId: user._id,
         campaignId: campaign._id,
         commissionAmount,
-        purchaseAmount: totalValidAmount,
+        purchaseAmount: commissionBaseAmount,
         tdsAmount,
         finalCommission,
         commissionPercent,
         status: campaign.status === "PAUSED" ? "HOLD" : "PENDING",
         createdAt: new Date(),
-        productDetails: validProducts.map((p) => ({
+        // Only commission-eligible lines — cancel of other SKUs is a no-op
+        productDetails: commissionProducts.map((p) => ({
           productId: String(p.productId),
           productAmount: Number(p.productAmount) || 0,
           status: "ACTIVE",
@@ -389,13 +389,13 @@ export const purchaseOrderWithAffiliateCampaign = async (req, res, next) => {
     return res.status(200).json({
       message: "Commission recorded successfully",
       data: {
-        totalValidAmount,
+        totalValidAmount: commissionBaseAmount,
         commissionAmount,
         tdsAmount,
         finalCommission,
         commissionPercent,
         eligibleCount,
-        validProducts: validProducts.map((p) => ({
+        validProducts: commissionProducts.map((p) => ({
           productId: p.productId,
           productAmount: p.productAmount,
           commission: p.commission,

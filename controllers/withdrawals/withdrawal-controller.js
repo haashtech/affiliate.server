@@ -8,43 +8,23 @@ import { addHistory } from "../../utils/history.js";
 import bcrypt from "bcryptjs";
 import { createRazorpayContactAndFund } from "../../lib/RazorpayContactAndFund.js";
 import { encryptData } from "../../utils/cript-data.js";
-import { Transaction } from "../../models/transactionSchema.js";
-import DailyAction from "../../models/actionSchema.js";
-import { DailyActionUpdater } from "../../utils/recordAction.js";
+import {
+  completeWithdrawal,
+  rejectWithdrawal,
+} from "../../helper/withdrawalWallet.js";
+
+const razorpayKeyId = process.env.RAZORPAY_KEY_ID;
+const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET;
+
+if (!razorpayKeyId || !razorpayKeySecret) {
+  throw new Error("Razorpay configuration is missing");
+}
 
 const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID ?? "rzp_test_4YU8jVusTNczuc",
-  key_secret: process.env.RAZORPAY_KEY_SECRET ?? "b6mKSb0YksLxVzKPiB4nudRl",
+  key_id: razorpayKeyId,
+  key_secret: razorpayKeySecret,
 });
 
-// export const getAllAffWithdrawalHistory = async (req, res) => {
-//   try {
-//     const filters = {};
-//     for (const key in req.query) {
-//       if (req.query[key]) {
-//         // console.log(req.query,'req.query');
-
-//         filters[key] = req.query[key];
-//       }
-//     }
-
-//     const users = Object.keys(filters).length
-//       ? await Withdrawals.find(filters).populate("user")
-//       : await Withdrawals.find().populate("user"); // fixed here
-
-//     res.status(200).json({
-//       success: true,
-//       count: users.length,
-//       data: users,
-//     });
-//   } catch (error) {
-//     console.error("Error fetching users:", error);
-//     res.status(500).json({
-//       success: false,
-//       message: "Server error while fetching users",
-//     });
-//   }
-// };
 
 export const getAllAffWithdrawalHistory = async (req, res) => {
   try {
@@ -148,108 +128,66 @@ export const updateAffWithdrawalStatus = async (req, res) => {
         .json({ success: false, message: "User wallet not found." });
     }
 
-    // Validation for COMPLETED
-    if (
-      status === "COMPLETED" &&
-      (!wallet.pendingAmount || wallet.pendingAmount <= 0)
-    ) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Cannot complete withdrawal. User has no pending payout amount.",
+    // PENDING → PROCESSING: status only (pendingAmount stays locked)
+    if (status === "PROCESSING") {
+      const updatedWithdrawal = await Withdrawals.findOneAndUpdate(
+        {
+          _id: withdrawalId,
+          status: "PENDING",
+        },
+        { $set: { status: "PROCESSING", rejectReason: "" } },
+        { new: true, runValidators: false }
+      ).populate("user");
+
+      if (!updatedWithdrawal) {
+        return res.status(400).json({
+          success: false,
+          message: `Cannot move to PROCESSING from status ${withdrawal.status}.`,
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: `Withdrawal status updated to ${status}`,
+        data: updatedWithdrawal,
       });
-    }
-
-    // Build withdrawal update
-    const withdrawalUpdate = {
-      status,
-      rejectReason:
-        status === "REJECTED" ? rejectReason || "No reason provided" : "",
-    };
-
-    // ✅ Reset amounts if REJECTED or CANCELLED
-    if (["REJECTED", "CANCELLED"].includes(status)) {
-      withdrawalUpdate.withdrawalAmount = 0;
-      withdrawalUpdate.requestedAmount = 0;
-      withdrawalUpdate.cancelledAmount = withdrawal.requestedAmount;
-    }
-
-    // Update withdrawal record
-    const updatedWithdrawal = await Withdrawals.findByIdAndUpdate(
-      withdrawalId,
-      { $set: withdrawalUpdate },
-      { new: true, runValidators: false }
-    ).populate("user");
-
-    if (!updatedWithdrawal) {
-      return res.status(404).json({
-        success: false,
-        message: "Withdrawal not found after update.",
-      });
-    }
-
-    // Prepare wallet updates
-    let walletUpdate = {};
-
-    if (status === "CANCELLED") {
-      walletUpdate = {
-        $inc: { balanceAmount: withdrawal.requestedAmount || 0 },
-        $set: { pendingAmount: 0 },
-      };
-
-      await addHistory(
-        user._id,
-        UserActionEnum.WITHDRAWAL_CANCELLED,
-        withdrawal.requestedAmount,
-        UserCategoryEnum.PAYOUT,
-        { method: withdrawal.paymentMethod }
-      );
     }
 
     if (status === "COMPLETED") {
-      const withdrawalAmount = withdrawal.withdrawalAmount || 0;
-      walletUpdate = {
-        $inc: {
-          totalAmount: withdrawalAmount,
-          paidAmount: withdrawalAmount,
-        },
-        $set: { pendingAmount: 0 },
-      };
-
-      await Transaction.create({
-        walletId: wallet._id,
-        type: "PAY",
-        refId: withdrawal._id,
-        amount: withdrawalAmount,
-        tdsAmount: withdrawal.tdsAmount || 0,
-        method: "BANK",
-        status: "PAID",
-        message: `Withdrawal of amount ₹${withdrawalAmount} completed.`,
+      const result = await completeWithdrawal({
+        withdrawalId,
+        paymentMethod: withdrawal.paymentMethod,
       });
 
-      // -----------------------------
-      // ✅ UPDATE DAILY ACTION
-      // -----------------------------
-      // const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+      if (result.code === "notFound") {
+        return res.status(404).json({
+          success: false,
+          message: "Withdrawal request not found.",
+        });
+      }
+      if (result.code === "alreadySettled") {
+        return res.status(200).json({
+          success: true,
+          message: "Withdrawal already completed.",
+          data: result.withdrawal,
+        });
+      }
+      if (result.code === "invalidStatus") {
+        return res.status(400).json({
+          success: false,
+          message: `Cannot complete withdrawal from status ${result.currentStatus}.`,
+        });
+      }
+      if (result.code === "walletUpdateFailed") {
+        return res.status(500).json({
+          success: false,
+          message: "Withdrawal claimed but wallet update failed. Retry completion.",
+          error: result.error?.message,
+        });
+      }
 
-      // await DailyAction.findOneAndUpdate(
-      //   {
-      //     userId: user._id,
-      //     adminId: withdrawal.adminId,
-      //     date: today,
-      //   },
-      //   {
-      //     $inc: {
-      //       earnings: withdrawalAmount,
-      //     },
-      //     $set: { updatedAt: new Date() },
-      //   },
-      //   { upsert: true, new: true }
-      // );
-      await new DailyActionUpdater(user._id, withdrawal.adminId)
-        .increment("earnings", withdrawalAmount)
-        .apply();
-        
+      const completed = result.withdrawal;
+      const withdrawalAmount = Number(completed.withdrawalAmount) || 0;
 
       await addHistory(
         user._id,
@@ -257,40 +195,89 @@ export const updateAffWithdrawalStatus = async (req, res) => {
         withdrawalAmount,
         UserCategoryEnum.PAYOUT,
         {
-          method: withdrawal.paymentMethod,
-          balanceBefore: withdrawal.balanceBefore,
-          balanceAfter: withdrawal.balanceAfter,
+          method: completed.paymentMethod,
+          balanceBefore: completed.balanceBefore,
+          balanceAfter: completed.balanceAfter,
         }
       );
-    }
 
-    if (status === "REJECTED") {
-      walletUpdate = {
-        $inc: { balanceAmount: withdrawal.requestedAmount || 0 },
-        $set: { pendingAmount: 0 },
-      };
-
-      await addHistory(
-        user._id,
-        UserActionEnum.WITHDRAWAL_REJECT,
-        withdrawal.withdrawalAmount,
-        UserCategoryEnum.PAYOUT,
-        {
-          method: withdrawal.paymentMethod,
-          reason: rejectReason || "No reason provided",
-        }
+      const populated = await Withdrawals.findById(completed._id).populate(
+        "user"
       );
+      return res.status(200).json({
+        success: true,
+        message: `Withdrawal status updated to ${status}`,
+        data: populated,
+      });
     }
 
-    // ✅ Apply wallet update if any
-    if (Object.keys(walletUpdate).length > 0) {
-      await Wallet.findByIdAndUpdate(wallet._id, walletUpdate, { new: true });
+    if (status === "REJECTED" || status === "CANCELLED") {
+      const result = await rejectWithdrawal({
+        withdrawalId,
+        reason: rejectReason,
+        terminalStatus: status,
+      });
+
+      if (result.code === "notFound") {
+        return res.status(404).json({
+          success: false,
+          message: "Withdrawal request not found.",
+        });
+      }
+      if (result.code === "alreadySettled") {
+        return res.status(200).json({
+          success: true,
+          message: `Withdrawal already ${status.toLowerCase()}.`,
+          data: result.withdrawal,
+        });
+      }
+      if (result.code === "invalidStatus") {
+        return res.status(400).json({
+          success: false,
+          message: `Cannot set ${status} from status ${result.currentStatus}.`,
+        });
+      }
+      if (result.code === "walletUpdateFailed") {
+        return res.status(500).json({
+          success: false,
+          message: "Withdrawal claimed but wallet update failed. Retry.",
+          error: result.error?.message,
+        });
+      }
+
+      const settled = result.withdrawal;
+      if (status === "CANCELLED") {
+        await addHistory(
+          user._id,
+          UserActionEnum.WITHDRAWAL_CANCELLED,
+          settled.requestedAmount,
+          UserCategoryEnum.PAYOUT,
+          { method: settled.paymentMethod }
+        );
+      } else {
+        await addHistory(
+          user._id,
+          UserActionEnum.WITHDRAWAL_REJECT,
+          settled.withdrawalAmount,
+          UserCategoryEnum.PAYOUT,
+          {
+            method: settled.paymentMethod,
+            reason: rejectReason || "No reason provided",
+          }
+        );
+      }
+
+      const populated = await Withdrawals.findById(settled._id).populate("user");
+      return res.status(200).json({
+        success: true,
+        message: `Withdrawal status updated to ${status}`,
+        data: populated,
+      });
     }
 
-    return res.status(200).json({
-      success: true,
-      message: `Withdrawal status updated to ${status}`,
-      data: updatedWithdrawal,
+    return res.status(400).json({
+      success: false,
+      message: `Unsupported withdrawal status: ${status}`,
     });
   } catch (error) {
     console.error("❌ Error updating withdrawal status:", error);
@@ -301,242 +288,6 @@ export const updateAffWithdrawalStatus = async (req, res) => {
     });
   }
 };
-
-// export const updateAffWithdrawalStatus = async (req, res) => {
-//   try {
-//     const { withdrawalId, status, rejectReason } = req.body;
-
-//     if (!withdrawalId || !status) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Withdrawal ID and status are required.",
-//       });
-//     }
-
-//     const withdrawal = await Withdrawals.findById(withdrawalId).populate("user");
-//     if (!withdrawal) {
-//       return res.status(404).json({
-//         success: false,
-//         message: "Withdrawal request not found.",
-//       });
-//     }
-
-//     const user = withdrawal.user;
-//     const wallet = await Wallet.findOne({ userId: user._id, adminId: withdrawal.adminId });
-//     if (!wallet) {
-//       return res.status(404).json({ success: false, message: "User wallet not found." });
-//     }
-
-//     // Validation for COMPLETED using wallet.pendingAmount
-//     if (status === "COMPLETED" && (!wallet.pendingAmount || wallet.pendingAmount <= 0)) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Cannot complete withdrawal. User has no pending payout amount.",
-//       });
-//     }
-
-//     // Update withdrawal status and reject reason
-//     const updatedWithdrawal = await Withdrawals.findByIdAndUpdate(
-//       withdrawalId,
-//       {
-//         $set: {
-//           status,
-//           rejectReason: status === "REJECTED" ? rejectReason || "No reason provided" : "",
-//         },
-//       },
-//       { new: true, runValidators: false }
-//     ).populate("user");
-
-//     if (!updatedWithdrawal) {
-//       return res.status(404).json({ success: false, message: "Withdrawal not found after update." });
-//     }
-
-//     // Prepare wallet updates
-//     let walletUpdate = {};
-
-//     if (status === "CANCELLED") {
-//       walletUpdate = {
-//         $inc: { balanceAmount: withdrawal.requestedAmount || 0 },
-//         $set: { pendingAmount: 0 },
-//       };
-
-//       await addHistory(
-//         user._id,
-//         UserActionEnum.WITHDRAWAL_CANCELLED,
-//         withdrawal.requestedAmount,
-//         UserCategoryEnum.PAYOUT,
-//         { method: withdrawal.paymentMethod }
-//       );
-//     }
-
-//     if (status === "COMPLETED") {
-//       const withdrawalAmount = withdrawal.withdrawalAmount || 0;
-//       walletUpdate = {
-//         $inc: { totalAmount: withdrawalAmount, paidAmount: withdrawalAmount },
-//         $set: { pendingAmount: 0 },
-//       };
-
-//       await addHistory(
-//         user._id,
-//         UserActionEnum.WITHDRAWAL_COMPLETED,
-//         withdrawalAmount,
-//         UserCategoryEnum.PAYOUT,
-//         { method: withdrawal.paymentMethod, balanceBefore: withdrawal.balanceBefore, balanceAfter: withdrawal.balanceAfter }
-//       );
-//     }
-
-//     if (status === "REJECTED") {
-//       walletUpdate = { $set: { pendingAmount: 0 } };
-
-//       await addHistory(
-//         user._id,
-//         UserActionEnum.WITHDRAWAL_REJECT,
-//         withdrawal.withdrawalAmount,
-//         UserCategoryEnum.PAYOUT,
-//         { method: withdrawal.paymentMethod, reason: rejectReason || "No reason provided" }
-//       );
-//     }
-
-//     // Apply wallet update if any
-//     if (Object.keys(walletUpdate).length > 0) {
-//       await Wallet.findByIdAndUpdate(wallet._id, walletUpdate, { new: true });
-//     }
-
-//     return res.status(200).json({
-//       success: true,
-//       message: `Withdrawal status updated to ${status}`,
-//       data: updatedWithdrawal,
-//     });
-//   } catch (error) {
-//     console.error("❌ Error updating withdrawal status:", error);
-//     return res.status(500).json({
-//       success: false,
-//       message: "Server error while updating withdrawal status.",
-//       error: error.message,
-//     });
-//   }
-// };
-// ===================================
-// export const updateAffWithdrawalStatus = async (req, res) => {
-//   try {
-//     const { withdrawalId, status, rejectReason } = req.body;
-
-//     // ------------------ 🧾 Basic Validation ------------------
-//     if (!withdrawalId || !status) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Withdrawal ID and status are required.",
-//       });
-//     }
-
-//     // ------------------ 🔍 Fetch Withdrawal ------------------
-//     const withdrawal = await Withdrawals.findById(withdrawalId).populate(
-//       "user"
-//     );
-//     if (!withdrawal) {
-//       return res.status(404).json({
-//         success: false,
-//         message: "Withdrawal request not found.",
-//       });
-//     }
-
-//     const user = withdrawal.user;
-
-//     // ------------------ ⚠️ Validate User Balance ------------------
-//     if (
-//       status === "COMPLETED" &&
-//       (!user.payouts || user.payouts.pendingAmount <= 0)
-//     ) {
-//       return res.status(400).json({
-//         success: false,
-//         message:
-//           "Cannot complete withdrawal. User has no pending payout amount.",
-//       });
-//     }
-
-//     // ------------------ 🧩 Prepare Update Fields ------------------
-//     const updateFields = {
-//       status,
-//       rejectReason:
-//         status === "REJECTED" ? rejectReason || "No reason provided" : "",
-//     };
-
-//     // ------------------ 🛠️ Update Withdrawal ------------------
-//     const updatedWithdrawal = await Withdrawals.findByIdAndUpdate(
-//       withdrawalId,
-//       { $set: updateFields },
-//       { new: true, runValidators: false }
-//     ).populate("user");
-
-//     if (!updatedWithdrawal) {
-//       return res.status(404).json({
-//         success: false,
-//         message: "Withdrawal not found after update.",
-//       });
-//     }
-
-//     // ------------------ ❌ Handle Rejected Withdrawal ------------------
-//     if (status === "REJECTED") {
-//       await AffUser.findByIdAndUpdate(
-//         user._id,
-//         { $set: { "payouts.pendingAmount": 0 } },
-//         { new: true }
-//       );
-
-//       await addHistory(
-//         user._id,
-//         UserActionEnum.WITHDRAWAL_REJECT,
-//         withdrawal.withdrawalAmount,
-//         UserCategoryEnum.PAYOUT,
-//         {
-//           method: withdrawal.paymentMethod,
-//           reason: updateFields.rejectReason,
-//         }
-//       );
-//     }
-
-//     // ------------------ ✅ Handle Completed Withdrawal ------------------
-//     if (status === "COMPLETED") {
-//       const { withdrawalAmount, balanceBefore, balanceAfter, paymentMethod } =
-//         updatedWithdrawal;
-
-//       await addHistory(
-//         user._id,
-//         UserActionEnum.WITHDRAWAL_COMPLETED,
-//         withdrawalAmount,
-//         UserCategoryEnum.PAYOUT,
-//         { method: paymentMethod, balanceBefore, balanceAfter }
-//       );
-
-//       await AffUser.findByIdAndUpdate(
-//         user._id,
-//         {
-//           $inc: {
-//             "payouts.paidAmount": withdrawalAmount,
-//           },
-//           $set: {
-//             "payouts.pendingAmount": 0,
-//           },
-//         },
-//         { new: true }
-//       );
-//     }
-
-//     // ------------------ 🟢 Success Response ------------------
-//     return res.status(200).json({
-//       success: true,
-//       message: `Withdrawal status updated to ${status}`,
-//       data: updatedWithdrawal,
-//     });
-//   } catch (error) {
-//     console.error("❌ Error updating withdrawal status:", error);
-//     return res.status(500).json({
-//       success: false,
-//       message: "Server error while updating withdrawal status.",
-//       error: error.message,
-//     });
-//   }
-// };
 
 export const processWithdrawal = async (req, res, next) => {
   try {
@@ -579,12 +330,6 @@ export const processWithdrawal = async (req, res, next) => {
       return res
         .status(400)
         .json({ success: false, message: "Insufficient balance" });
-
-    if (wallet.pendingAmount > 0)
-      return res.status(400).json({
-        success: false,
-        message: "You already have a pending withdrawal",
-      });
 
     // 🔹 Fetch platform settings
     const platform = await Platform.findOne({ adminId });
@@ -722,110 +467,3 @@ export const processWithdrawal = async (req, res, next) => {
     });
   }
 };
-
-// export const updateAffWithdrawalStatus = async (req, res) => {
-//   try {
-//     const { withdrawalId, status, rejectReason } = req.body;
-
-//     if (!withdrawalId || !status) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Withdrawal ID and status are required.",
-//       });
-//     }
-
-//      // ✅ Find withdrawal with user details before updating
-//      const withdrawal = await Withdrawals.findById(withdrawalId).populate("user");
-
-//      if (!withdrawal) {
-//        return res.status(404).json({
-//          success: false,
-//          message: "Withdrawal request not found.",
-//        });
-//      }
-
-//      // ✅ Check user's pending amount before marking completed
-//      const user = withdrawal.user;
-//      if (status === "COMPLETED" && (!user.payouts || user.payouts.pendingAmount <= 0)) {
-//        return res.status(400).json({
-//          success: false,
-//          message: "Cannot complete withdrawal. User has no pending payout amount.",
-//        });
-//      }
-
-//     // Build update object
-//     const updateFields = { status };
-//     if (status === "REJECTED") {
-//       updateFields.rejectReason = rejectReason || "No reason provided";
-//     } else {
-//       updateFields.rejectReason = ""; // clear reason if accepted/processed
-//     }
-
-//     // Update only specific fields without triggering validation errors
-//     const updatedWithdrawal = await Withdrawals.findByIdAndUpdate(
-//       withdrawalId,
-//       { $set: updateFields },
-//       {
-//         new: true,
-//         runValidators: false, // prevent required field validation
-//       }
-//     ).populate("user");
-//     if(status === "REJECTED"){
-//       await AffUser.findByIdAndUpdate(
-//         updatedWithdrawal.user._id,
-//         {
-//           $set: { "payouts.pendingAmount": 0 }, // reset pending amount
-//         },
-//         { new: true }
-//       );
-//     }
-
-//     if (status === "COMPLETED") {
-//       console.log(status, "status status status");
-
-//       const { withdrawalAmount, balanceBefore, balanceAfter, paymentMethod } =
-//         updatedWithdrawal;
-
-//       await addHistory(
-//         updatedWithdrawal.user._id,
-//         UserActionEnum.WITHDRAWAL_COMPLETED,
-//         withdrawalAmount,
-//         UserCategoryEnum.PAYOUT,
-//         {
-//           method: paymentMethod,
-//           balanceBefore,
-//           balanceAfter,
-//         }
-//       );
-
-//        // ✅ Update user's payout stats
-//        await AffUser.findByIdAndUpdate(
-//         updatedWithdrawal.user._id,
-//         {
-//           $inc: { "payouts.paidAmount": withdrawalAmount }, // add amount to paidAmount
-//           $set: { "payouts.pendingAmount": 0 }, // reset pending amount
-//         },
-//         { new: true }
-//       );
-//     }
-
-//     if (!updatedWithdrawal) {
-//       return res.status(404).json({
-//         success: false,
-//         message: "Withdrawal request not found.",
-//       });
-//     }
-
-//     res.status(200).json({
-//       success: true,
-//       message: `Withdrawal status updated to ${status}`,
-//       data: updatedWithdrawal,
-//     });
-//   } catch (error) {
-//     console.error("Error updating withdrawal status:", error);
-//     res.status(500).json({
-//       success: false,
-//       message: "Server error while updating withdrawal status.",
-//     });
-//   }
-// };

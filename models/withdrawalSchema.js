@@ -35,6 +35,12 @@ const WithdrawalSchema = new mongoose.Schema(
     },
     rejectReason: { type: String },
 
+    // Withdrawal wallet settlement markers (not transactional across Wallet docs)
+    accountingApplied: { type: Boolean, default: false },
+    accountingKind: {
+      type: String,
+      enum: ["COMPLETE", "RELEASE", "REVERSE_AFTER_COMPLETE"],
+    },
   },
   { timestamps: true }
 );

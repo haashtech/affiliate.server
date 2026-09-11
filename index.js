@@ -91,6 +91,7 @@ const baseOrigins = [
   "https://www.admin.uracca.in",
   "https://admin.uracca.in",
   "https://affiliate.uracca.com",
+  "https://example.admin.uracca.com",
   "https://example.admin.uracca.in",
   "https://example.uracca.in",
 ];
@@ -104,15 +105,28 @@ const extraOrigins = process.env.ALLOWED_ORIGINS
 
 // Merge base + extra (no duplicates)
 const allowedOrigins = Array.from(new Set([...baseOrigins, ...extraOrigins]));
-// console.log(allowedOrigins.co,'extraOrigins');
 
+/** Tenant admin hosts: https://{tenant}.admin.uracca.com|.in (and www.) */
+const isTenantAdminOrigin = (origin) => {
+  try {
+    const { protocol, hostname } = new URL(origin);
+    if (protocol !== "https:") return false;
+    return /^(?:www\.)?(?:[a-z0-9-]+\.)?admin\.uracca\.(com|in)$/i.test(
+      hostname
+    );
+  } catch {
+    return false;
+  }
+};
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      // console.log("Allowed origins:", allowedOrigins);
-      // console.log("🔥 Incoming CORS request from:", origin);
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (
+        !origin ||
+        allowedOrigins.includes(origin) ||
+        isTenantAdminOrigin(origin)
+      ) {
         callback(null, true);
       } else {
         console.log("❌ Blocked Origin:", origin);

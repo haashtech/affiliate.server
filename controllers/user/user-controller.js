@@ -324,7 +324,7 @@ export const logoutAdmin = async (req, res, next) => {
       path: "/",
       domain: process.env.COOKIE_DOMAIN,
       secure: process.env.NODE_ENV === "production",
-      // httpOnly: true,
+      httpOnly: true,
       sameSite: "Strict",
     });
 
@@ -332,7 +332,7 @@ export const logoutAdmin = async (req, res, next) => {
       path: "/",
       domain: process.env.COOKIE_DOMAIN,
       secure: process.env.NODE_ENV === "production",
-      // httpOnly: true,
+      httpOnly: true,
       sameSite: "Strict",
     });
 

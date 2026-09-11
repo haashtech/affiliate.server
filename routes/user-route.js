@@ -4,7 +4,7 @@ const router = express.Router();
 import { getAllAdminsAffUsers, getAllAffUsers, getAllAffUsersForEachAdmins, getCurrentUsers, logoutAdmin } from "../controllers/user/user-controller.js";
 import { updateAffUserStatus, genericUpdateAffUser } from "../controllers/user/user-updates.js";
 import { loginUser, loginAdmin } from "../controllers/auth/auth-controller.js";
-import { authenticateAdmin, authenticateUser } from "../middleware/middleware.js";
+import { authenticateAdmin, authenticateUser, requireSuperAdminUnlessBootstrap } from "../middleware/middleware.js";
 import { registerAdmin, registerUser } from "../controllers/auth/registration.controller.js";
 import { upload } from "../middleware/upload.middleware.js";
 
@@ -16,7 +16,7 @@ router.get("/all",authenticateAdmin, getAllAffUsersForEachAdmins);
 router.post("/admin-login", loginAdmin);
 router.post("/user-login", loginUser);
 
-router.post("/admin-register", registerAdmin);
+router.post("/admin-register", requireSuperAdminUnlessBootstrap, registerAdmin);
 
 // multiple files => "documents"
 router.post(

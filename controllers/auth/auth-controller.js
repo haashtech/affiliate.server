@@ -55,10 +55,14 @@ export const loginAdmin = async (req, res) => {
 
     const token = jwt.sign(payload, JWT_SECRET_ADMIN, { expiresIn: "7d" });
     const cookieDomain = getCookieDomain(req);
+    const origin = req.headers.origin || "";
+    const secureCookie =
+      process.env.NODE_ENV === "production" || origin.startsWith("https://");
 
     // Set cookie
     res.cookie("aff-admin-tkn", token, {
-      secure: req.headers.origin?.startsWith("https://"),
+      httpOnly: true,
+      secure: secureCookie,
       domain: cookieDomain,
       sameSite: "Strict",
       maxAge: 30 * 24 * 60 * 60 * 1000,
@@ -122,11 +126,13 @@ export const loginUser = async (req, res, next) => {
 
     res.cookie("aff_ses_server", token, {
       httpOnly: true,
-      secure: false, // important for IP
-      sameSite: "lax", // important for IP
+      secure:
+        process.env.NODE_ENV === "production" ||
+        (req.headers.origin || "").startsWith("https://"),
+      sameSite: "lax",
+      domain: cookieDomain,
       path: "/",
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 🔥 7 days in ms
-      // maxAge: 1 * 60 * 1000, // i min
+      maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
     return res.status(200).json({

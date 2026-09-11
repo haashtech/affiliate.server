@@ -14,8 +14,13 @@ import {
 import { payWithdrawalToUser } from "../controllers/withdrawals/withdrawal-payout-controller.js";
 
 router.get("/all", authenticateAdmin, getAllAffWithdrawalHistory);
-router.patch("/action", checkUserStatus, updateAffWithdrawalStatus);
-router.patch("/payout", payWithdrawalToUser);
+router.patch(
+  "/action",
+  authenticateAdmin,
+  checkUserStatus,
+  updateAffWithdrawalStatus
+);
+router.patch("/payout", authenticateAdmin, payWithdrawalToUser);
 
 
 // --------- user withdrawal route ------------- >

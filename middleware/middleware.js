@@ -9,9 +9,7 @@ export const authenticateUser = async (req, res, next) => {
   try {
     const token =
       req.cookies?.aff_ses_server || req.headers.authorization?.split(" ")[1];
-      console.log("TOKEN:", token);
-    
-
+    // console.log("TOKEN:", token);
     if (!token) {
       return res
         .status(401)
@@ -43,7 +41,7 @@ export const authenticateUser = async (req, res, next) => {
     ) {
       return res.status(403).json({
         success: false,
-        message: `Access denied. Your admin account is ${admin.status}.`,
+        message: `Access denied. Your account is ${user.status}.`,
       });
     }
 
@@ -116,6 +114,37 @@ export const authenticateAdmin = async (req, res, next) => {
     next();
   } catch (error) {
     console.error("Admin authentication middleware error:", error);
+    return res
+      .status(500)
+      .json({ success: false, message: "Server error", error: error.message });
+  }
+};
+
+/**
+ * Allow open admin registration only when no SUPER_ADMIN exists (bootstrap).
+ * After bootstrap, require an authenticated SUPER_ADMIN.
+ */
+export const requireSuperAdminUnlessBootstrap = async (req, res, next) => {
+  try {
+    const superAdminCount = await AffUser.countDocuments({
+      userType: UserTypeEnum.SUPER_ADMIN,
+    });
+
+    if (superAdminCount === 0) {
+      return next();
+    }
+
+    return authenticateAdmin(req, res, () => {
+      if (req.admin?.userType !== UserTypeEnum.SUPER_ADMIN) {
+        return res.status(403).json({
+          success: false,
+          message: "Access denied. SUPER_ADMIN only.",
+        });
+      }
+      return next();
+    });
+  } catch (error) {
+    console.error("requireSuperAdminUnlessBootstrap error:", error);
     return res
       .status(500)
       .json({ success: false, message: "Server error", error: error.message });

@@ -352,9 +352,18 @@ export const cancelWalletCommissionAmountFromAff = async (req, res, next) => {
 
 export const rechargeUserWallet = async (req, res, next) => {
   try {
-    // const userId = req.user._id;
     const adminId = req.params.adminId;
     const userId = req.params.userId;
+
+    if (
+      String(req.user._id) !== String(userId) ||
+      String(req.user.workingOn) !== String(adminId)
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized",
+      });
+    }
 
     const { amount, type } = req.body;
 

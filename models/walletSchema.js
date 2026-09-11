@@ -11,9 +11,9 @@ const walletSchema = new mongoose.Schema(
     userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     adminId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
 
-    totalAmount: { type: Number, default: 0 },      // total earned including pending & paid
-    pendingAmount: { type: Number, default: 0 },    // yet-to-be-paid commissions
-    paidAmount: { type: Number, default: 0 },       // already paid out
+    totalAmount: { type: Number, default: 0 },      // lifetime commission earnings (do not bump on payout complete)
+    pendingAmount: { type: Number, default: 0 },    // locked net amount in open withdrawals (PENDING/PROCESSING)
+    paidAmount: { type: Number, default: 0 },       // successfully paid-out withdrawal nets
     cancelledAmount: { type: Number, default: 0 },  // cancelled commissions
     commissionAmount: { type: Number, default: 0 }, // total commission earned
     balanceAmount: { type: Number, default: 0 },    // available balance for withdrawal

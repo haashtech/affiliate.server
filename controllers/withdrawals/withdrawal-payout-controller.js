@@ -1,6 +1,5 @@
 import axios from "axios";
 import Withdrawals from "../../models/withdrawalSchema.js";
-import { Wallet } from "../../models/walletSchema.js";
 import AffUser from "../../models/aff-user.js";
 
 /**
@@ -17,13 +16,19 @@ export const payWithdrawalToUser = async (req, res) => {
     if (!withdrawal)
       return res.status(404).json({ success: false, message: "Withdrawal not found" });
 
+    if (withdrawal.status !== "PENDING") {
+      return res.status(400).json({
+        success: false,
+        message: `Payout can only be initiated for PENDING withdrawals (current: ${withdrawal.status}).`,
+      });
+    }
+
     const user = await AffUser.findById(withdrawal.user);
     if (!user)
       return res.status(404).json({ success: false, message: "User not found" });
 
     const amount = Math.round(withdrawal.withdrawalAmount * 100); // Razorpay uses paise
     const isUPI = withdrawal.onlineMethod.method === "UPI";
-    const methodKey = isUPI ? "upi" : "bank";
 
     // 2️⃣ Get saved Razorpay IDs from withdrawal (already created earlier)
     const contactId = withdrawal.razorpayContactId;
@@ -37,8 +42,14 @@ export const payWithdrawalToUser = async (req, res) => {
     }
 
     // 3️⃣ Configure Axios Auth
-    const key_id = process.env.RAZORPAY_KEY_ID ?? "rzp_test_4YU8jVusTNczuc";
-    const key_secret = process.env.RAZORPAY_KEY_SECRET ?? "b6mKSb0YksLxVzKPiB4nudRl";
+    const key_id = process.env.RAZORPAY_KEY_ID;
+    const key_secret = process.env.RAZORPAY_KEY_SECRET;
+    if (!key_id || !key_secret) {
+      return res.status(500).json({
+        success: false,
+        message: "Payment provider is not configured",
+      });
+    }
     const auth = { username: key_id, password: key_secret };
 
     // 4️⃣ Prepare payout payload
@@ -67,16 +78,25 @@ export const payWithdrawalToUser = async (req, res) => {
 
     const payout = payoutRes.data;
 
-    // 6️⃣ Update withdrawal record
-    withdrawal.razorpayPayoutId = payout.id;
-    withdrawal.status = "PROCESSING";
-    await withdrawal.save();
-
-    // 7️⃣ Update wallet (set pending to 0)
-    await Wallet.findOneAndUpdate(
-      { userId: user._id, adminId: withdrawal.adminId },
-      // { $set: { pendingAmount: 0 } }
+    // 6️⃣ Update withdrawal → PROCESSING; do NOT touch pendingAmount
+    const updated = await Withdrawals.findOneAndUpdate(
+      { _id: withdrawalId, status: "PENDING" },
+      {
+        $set: {
+          razorpayPayoutId: payout.id,
+          status: "PROCESSING",
+        },
+      },
+      { new: true }
     );
+
+    if (!updated) {
+      return res.status(400).json({
+        success: false,
+        message: "Withdrawal is no longer PENDING; payout may have already been started.",
+        payout,
+      });
+    }
 
     console.log("✅ Payout successful:", payout.id);
 
