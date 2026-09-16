@@ -59,8 +59,24 @@ const NotificationsSchema = new mongoose.Schema(
             return "Commission payout processed";
           case UserActionEnum.REWARD_CLAIM:
             return "User Claimed a reward";
-            case UserActionEnum.REWARD_EARN:
-              return "You Earned a reward";
+          case UserActionEnum.REWARD_EARN:
+            return "You Earned a reward";
+          case UserActionEnum.WITHDRAWAL_COMPLETED:
+            return "Withdrawal completed";
+          case UserActionEnum.WITHDRAWAL_CANCELLED:
+            return "Withdrawal cancelled";
+          case UserActionEnum.NEW_USER:
+            return "New affiliate application";
+          case UserActionEnum.USER_STATUS_CHANGE:
+            return "Affiliate status updated";
+          case UserActionEnum.CAMPAIGN_CREATED:
+            return "Campaign created";
+          case UserActionEnum.CAMPAIGN_PAUSED:
+            return "Campaign paused";
+          case UserActionEnum.CAMPAIGN_ENDED:
+            return "Campaign ended";
+          case UserActionEnum.COLLABORATION:
+            return "New collaboration request";
           default:
             return "User action recorded";
         }

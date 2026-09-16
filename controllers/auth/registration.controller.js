@@ -1,6 +1,5 @@
 import { handleOtpSending } from "../../lib/otp-sender/index.js";
 import AffUser from "../../models/aff-user.js";
-import AffiliateNotifications from "../../models/notificationSchema.js";
 import { NpmPackage } from "../../models/npmSchema.js";
 import { Platform } from "../../models/platformSchema.js";
 import { generateApiKey } from "../../utils/generateApiKey.js";
@@ -11,6 +10,8 @@ import bcrypt from "bcryptjs";
 import { ExtractDomainParts } from "../../helper/domain-existence.js";
 import Domains from "../../models/domainSchema.js";
 import { Referring } from "../../models/referringPeopleSchema.js";
+import { UserActionEnum, UserCategoryEnum } from "../../models/enum.js";
+import { notifyAllSuperAdmins } from "../../utils/notifyAdmin.js";
 
 const getFileType = (mimetype = "", format = "") => {
   if (mimetype.startsWith("image/")) return "image";
@@ -405,17 +406,17 @@ export const registerUser = async (req, res) => {
     }
 
     /* ------------------------------------------------
-       🔔 Notification
+       🔔 Notify SUPER_ADMINs (admin inbox = their own user id)
     ------------------------------------------------ */
-    await AffiliateNotifications.create({
-      user: newUser._id,
-      action: "NEW_USER",
-      recipientType: "SUPER_ADMIN",
-      category: "REGISTRATION",
+    const displayName = fullName || userName || email || "A new affiliate";
+    await notifyAllSuperAdmins({
+      action: UserActionEnum.NEW_USER,
+      category: UserCategoryEnum.REGISTRATION,
       message: referralId
-        ? `New user registered with referral ID: ${referralId}`
-        : "New user registered",
+        ? `${displayName} registered with referral ${referralId}`
+        : `${displayName} submitted an affiliate application`,
       metadata: {
+        userId: newUser._id,
         referredBy: parentUser?._id || null,
       },
     });

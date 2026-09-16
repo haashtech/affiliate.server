@@ -6,20 +6,23 @@ import AffiliateNotifications from "../models/notificationSchema.js";
 
 export async function createNotification({
   userId,
-  action = UserActionEnum.GENERAL,
+  action = UserActionEnum.NEW_USER,
   recipientType = "USER",
   category = UserCategoryEnum.GENERAL,
   message,
   metadata = {},
 }) {
   try {
-    // 1️⃣ Check user notification preference
+    // 1️⃣ Check user notification preference (members only)
     const user = await AffUser.findById(userId)
-      .select("notifications.isOn")
+      .select("notifications.isOn userType")
       .lean();
 
-    // 🔕 Notifications OFF → skip silently
-    if (!user?.notifications?.isOn) {
+    const isAdminRecipient =
+      recipientType === "ADMIN" || recipientType === "SUPER_ADMIN";
+
+    // 🔕 Member notifications OFF → skip silently (admin inbox always written)
+    if (!isAdminRecipient && !user?.notifications?.isOn) {
       return;
     }
 

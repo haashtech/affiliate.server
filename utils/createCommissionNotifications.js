@@ -1,5 +1,6 @@
 import { UserActionEnum, UserCategoryEnum } from "../models/enum.js";
 import AffiliateNotifications from "../models/notificationSchema.js";
+import { notifyAdmin } from "./notifyAdmin.js";
 
 /**
  * Creates payout notifications for both user and admin
@@ -17,34 +18,30 @@ export const createCommissionNotifications = async ({
 }) => {
   if (!user || !admin || !campaign || !amount) return;
 
-  if(!user.notifications.isOn){
-    return;
-  }
-
   try {
-    // 🟢 For User
-    await AffiliateNotifications.create({
-      user: user._id,
-      action: UserActionEnum.COMMISSION_PAYOUT,
-      recipientType: "USER",
-      category: UserCategoryEnum.EARNINGS,
-      message: `New commission of ₹${amount} credited for campaign "${campaign.campaignAccessKey}" from company "${admin.userName}".`,
-      messageType: "Commission payout processed",
-      metadata: {
-        campaignId: campaign._id,
-        adminId: admin._id,
-        amount,
-      },
-    });
+    // 🟢 For User (respect preference)
+    if (user.notifications?.isOn !== false) {
+      await AffiliateNotifications.create({
+        user: user._id,
+        action: UserActionEnum.COMMISSION_PAYOUT,
+        recipientType: "USER",
+        category: UserCategoryEnum.EARNINGS,
+        message: `New commission of ₹${amount} credited for campaign "${campaign.campaignAccessKey}" from company "${admin.userName}".`,
+        messageType: "Commission payout processed",
+        metadata: {
+          campaignId: campaign._id,
+          adminId: admin._id,
+          amount,
+        },
+      });
+    }
 
-    // 🔵 For Admin
-    await AffiliateNotifications.create({
-      user: admin._id,
+    // 🔵 For Admin inbox (Recent Activities / notifications page)
+    await notifyAdmin({
+      adminId: admin._id,
       action: UserActionEnum.COMMISSION_PAYOUT,
-      recipientType: "ADMIN",
       category: UserCategoryEnum.PAYOUT,
-      message: `New commission of ₹${amount} paid to user "${user.userName}" for campaign "${campaign.campaignAccessKey}".`,
-      messageType: "Commission payout processed",
+      message: `New commission of ₹${amount} paid to "${user.userName || user.fullName}" for campaign "${campaign.campaignAccessKey}".`,
       metadata: {
         userId: user._id,
         campaignId: campaign._id,

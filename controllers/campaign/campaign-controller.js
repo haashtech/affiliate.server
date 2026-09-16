@@ -4,6 +4,11 @@ import { encryptData } from "../../utils/cript-data.js";
 import generateUniqueCampaignAccessKey from "../../utils/generate-keys.js";
 import { InitAffiliate, TrackClick } from "@haash/affiliate";
 import { DailyActionUpdater } from "../../utils/recordAction.js";
+import { UserActionEnum, UserCategoryEnum } from "../../models/enum.js";
+import {
+  campaignActionFromStatus,
+  notifyAdmin,
+} from "../../utils/notifyAdmin.js";
 
 export const createCampaign = async (req, res) => {
   try {
@@ -93,6 +98,21 @@ export const createCampaign = async (req, res) => {
       .increment("activeCampaigns")
       .apply();
     // ============ Affiliate daily action ==============
+
+    const who = user.fullName || user.userName || "Affiliate";
+    const productTitle = title || productId || "product";
+    await notifyAdmin({
+      adminId: accountId,
+      action: UserActionEnum.CAMPAIGN_CREATED,
+      category: UserCategoryEnum.CAMPAIGN,
+      message: `${who} created a campaign for ${productTitle}`,
+      metadata: {
+        campaignId: savedCampaign._id,
+        userId: user._id,
+        productId,
+        campaignAccessKey,
+      },
+    });
 
     res.status(201).json({
       success: true,
@@ -231,6 +251,8 @@ export const updateAffUserCampaignWidget = async (
     throw new Error("Campaign not found or not owned by this admin");
   }
 
+  const previousStatus = existing.status;
+
   // 2. Update the campaign
   const updatedCampaign = await Campaign.findByIdAndUpdate(
     campaignId,
@@ -240,6 +262,34 @@ export const updateAffUserCampaignWidget = async (
 
   if (!updatedCampaign) {
     throw new Error("Failed to update campaign");
+  }
+
+  if (
+    adminId &&
+    updateData?.status &&
+    String(previousStatus) !== String(updatedCampaign.status)
+  ) {
+    const action = campaignActionFromStatus(updatedCampaign.status);
+    if (action) {
+      const member = await AffUser.findById(updatedCampaign.userId)
+        .select("fullName userName")
+        .lean();
+      const who = member?.fullName || member?.userName || "Affiliate";
+      const productTitle =
+        updatedCampaign.product?.title || updatedCampaign.campaignAccessKey;
+      await notifyAdmin({
+        adminId,
+        action,
+        category: UserCategoryEnum.CAMPAIGN,
+        message: `Campaign for ${productTitle} (${who}) is now ${updatedCampaign.status}`,
+        metadata: {
+          campaignId: updatedCampaign._id,
+          userId: updatedCampaign.userId,
+          previousStatus,
+          status: updatedCampaign.status,
+        },
+      });
+    }
   }
 
   return updatedCampaign;

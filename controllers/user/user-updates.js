@@ -1,4 +1,6 @@
 import AffUser from "../../models/aff-user.js";
+import { UserActionEnum, UserCategoryEnum } from "../../models/enum.js";
+import { notifyAdmin } from "../../utils/notifyAdmin.js";
 
 export const 
 updateAffUserStatus = async (req, res) => {
@@ -47,6 +49,7 @@ updateAffUserStatus = async (req, res) => {
       user.affType = {};
     }
 
+    const previousStatus = user.status;
     user.status = status;
     user.affType.type = type;
     user.affType.tdsType = tdsType;
@@ -64,6 +67,31 @@ updateAffUserStatus = async (req, res) => {
     }
 
     await user.save();
+
+    const adminId = req.admin?._id;
+    if (adminId && previousStatus !== status) {
+      const who = user.fullName || user.userName || user.email || "Affiliate";
+      const statusLabel =
+        status === "APPROVED"
+          ? "approved and activated"
+          : status === "REJECTED"
+            ? "rejected"
+            : status === "BLOCKED"
+              ? "blocked"
+              : `updated to ${status}`;
+
+      await notifyAdmin({
+        adminId,
+        action: UserActionEnum.USER_STATUS_CHANGE,
+        category: UserCategoryEnum.ADMIN,
+        message: `${who} has been ${statusLabel}`,
+        metadata: {
+          userId: user._id,
+          previousStatus,
+          status,
+        },
+      });
+    }
 
     return res.json({
       success: true,

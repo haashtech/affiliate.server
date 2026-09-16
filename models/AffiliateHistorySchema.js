@@ -35,8 +35,10 @@ const affiliateHistorySchema = new mongoose.Schema(
             return "Withdrawal Accepted";
           case UserActionEnum.WITHDRAWAL_REJECT:
             return "Withdrawal rejected";
-            case UserActionEnum.WITHDRAWAL_COMPLETED:
+          case UserActionEnum.WITHDRAWAL_COMPLETED:
               return "Withdrawal payout completed successfully";
+          case UserActionEnum.WITHDRAWAL_CANCELLED:
+              return "Withdrawal cancelled";
           case UserActionEnum.CHANGE_PASSWORD:
             return "Password changed";
           case UserActionEnum.CAMPAIGN_STARTED:

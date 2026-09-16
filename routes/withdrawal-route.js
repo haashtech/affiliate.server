@@ -28,7 +28,6 @@ router.post(
   "/new-withdrawal/:adminId",
   authenticateUser,
   checkUserStatus,
-
   processWithdrawal
 );
 

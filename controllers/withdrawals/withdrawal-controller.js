@@ -12,6 +12,7 @@ import {
   completeWithdrawal,
   rejectWithdrawal,
 } from "../../helper/withdrawalWallet.js";
+import { notifyAdmin } from "../../utils/notifyAdmin.js";
 
 const razorpayKeyId = process.env.RAZORPAY_KEY_ID;
 const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET;
@@ -146,6 +147,22 @@ export const updateAffWithdrawalStatus = async (req, res) => {
         });
       }
 
+      const member = updatedWithdrawal.user;
+      const who = member?.fullName || member?.userName || "Affiliate";
+      if (updatedWithdrawal.adminId) {
+        await notifyAdmin({
+          adminId: updatedWithdrawal.adminId,
+          action: UserActionEnum.WITHDRAWAL_ACCEPT,
+          category: UserCategoryEnum.PAYOUT,
+          message: `Withdrawal of ₹${updatedWithdrawal.withdrawalAmount} for ${who} moved to processing`,
+          metadata: {
+            withdrawalId: updatedWithdrawal._id,
+            userId: member?._id,
+            amount: updatedWithdrawal.withdrawalAmount,
+          },
+        });
+      }
+
       return res.status(200).json({
         success: true,
         message: `Withdrawal status updated to ${status}`,
@@ -200,6 +217,22 @@ export const updateAffWithdrawalStatus = async (req, res) => {
           balanceAfter: completed.balanceAfter,
         }
       );
+
+      const who = user.fullName || user.userName || "Affiliate";
+      if (completed.adminId) {
+        await notifyAdmin({
+          adminId: completed.adminId,
+          action: UserActionEnum.WITHDRAWAL_COMPLETED,
+          category: UserCategoryEnum.PAYOUT,
+          message: `Paid ₹${withdrawalAmount} to ${who}`,
+          metadata: {
+            withdrawalId: completed._id,
+            userId: user._id,
+            amount: withdrawalAmount,
+            method: completed.paymentMethod,
+          },
+        });
+      }
 
       const populated = await Withdrawals.findById(completed._id).populate(
         "user"
@@ -265,6 +298,28 @@ export const updateAffWithdrawalStatus = async (req, res) => {
             reason: rejectReason || "No reason provided",
           }
         );
+      }
+
+      const who = user.fullName || user.userName || "Affiliate";
+      if (settled.adminId) {
+        await notifyAdmin({
+          adminId: settled.adminId,
+          action:
+            status === "CANCELLED"
+              ? UserActionEnum.WITHDRAWAL_CANCELLED
+              : UserActionEnum.WITHDRAWAL_REJECT,
+          category: UserCategoryEnum.PAYOUT,
+          message:
+            status === "CANCELLED"
+              ? `Withdrawal of ₹${settled.requestedAmount} for ${who} was cancelled`
+              : `Withdrawal of ₹${settled.withdrawalAmount} for ${who} was rejected`,
+          metadata: {
+            withdrawalId: settled._id,
+            userId: user._id,
+            amount: settled.withdrawalAmount || settled.requestedAmount,
+            reason: rejectReason || "",
+          },
+        });
       }
 
       const populated = await Withdrawals.findById(settled._id).populate("user");
@@ -445,6 +500,23 @@ export const processWithdrawal = async (req, res, next) => {
         balanceAfter: wallet.balanceAmount,
       }
     );
+
+    const member = await AffUser.findById(userId)
+      .select("fullName userName")
+      .lean();
+    const who = member?.fullName || member?.userName || "Affiliate";
+    await notifyAdmin({
+      adminId,
+      action: UserActionEnum.WITHDRAWAL_REQUEST,
+      category: UserCategoryEnum.PAYOUT,
+      message: `${who} requested a withdrawal of ₹${finalAmount}`,
+      metadata: {
+        withdrawalId: withdrawal._id,
+        userId,
+        amount: finalAmount,
+        method,
+      },
+    });
 
     return res.status(200).json({
       success: true,

@@ -33,7 +33,9 @@ export const allAdminNotifications = async (req, res, next) => {
 
     const query = {
       user: adminId,
-      recipientType: req.admin.userType, // ADMIN / SUPER_ADMIN
+      // Admin inbox includes both ADMIN and SUPER_ADMIN-targeted rows
+      // (some writers historically hard-coded "ADMIN").
+      recipientType: { $in: ["ADMIN", "SUPER_ADMIN"] },
     };
 
     /* ----------------------------------------------------
@@ -113,7 +115,7 @@ export const deleteAdminNotifications = async (req, res, next) => {
     const result = await AffiliateNotifications.deleteMany({
       _id: { $in: ids },
       user: adminId,
-      recipientType: req.admin.userType, // ADMIN / SUPER_ADMIN
+      recipientType: { $in: ["ADMIN", "SUPER_ADMIN"] },
     });
 
     return res.status(200).json({
@@ -152,7 +154,7 @@ export const admitAsReadAdminNotifications = async (req, res, next) => {
       {
         _id: nId,
         user: adminId,
-        recipientType: req.admin.userType,
+        recipientType: { $in: ["ADMIN", "SUPER_ADMIN"] },
         isRead: false,
       },
       {
