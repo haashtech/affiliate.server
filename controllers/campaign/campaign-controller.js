@@ -1,5 +1,6 @@
 import AffUser from "../../models/aff-user.js";
 import { Campaign } from "../../models/campaignSchema.js";
+import { Product } from "../../models/productSchema.js";
 import { encryptData } from "../../utils/cript-data.js";
 import generateUniqueCampaignAccessKey from "../../utils/generate-keys.js";
 import { InitAffiliate, TrackClick } from "@haash/affiliate";
@@ -181,7 +182,54 @@ export const getUserCampaigns = async (req, res, next) => {
       .sort(sortQuery)
       .populate("userId commissionRecords");
 
-    const encryptedData = encryptData(campaigns);
+    // Admin sees all campaigns (INACTIVE visible with status).
+    // Affiliate client hides INACTIVE campaigns / inactive products.
+    const isAdminRequest = Boolean(req.admin);
+
+    const productIds = [
+      ...new Set(
+        campaigns
+          .map((c) => c.product?.productId?.toString())
+          .filter(Boolean)
+      ),
+    ];
+
+    const localProducts =
+      productIds.length > 0
+        ? await Product.find({ productId: { $in: productIds } })
+          .select("productId isActive status")
+          .lean()
+        : [];
+
+    const productMap = new Map(
+      localProducts.map((p) => [p.productId.toString(), p])
+    );
+
+    const visibleCampaigns = [];
+    for (const campaign of campaigns) {
+      const pid = campaign.product?.productId?.toString();
+      const local = pid ? productMap.get(pid) : null;
+      const productInactive = local && local.isActive === false;
+      const campaignInactive = campaign.status === "INACTIVE";
+
+      // Affiliate client only: hide inactive campaign / product
+      if (!isAdminRequest && (campaignInactive || productInactive)) {
+        continue;
+      }
+
+      const plain = campaign.toObject();
+      if (local) {
+        plain.productStatus = local.status;
+        plain.productIsActive = local.isActive;
+      }
+      // Admin UI: surface product off-switch as INACTIVE status
+      if (productInactive) {
+        plain.productIsActive = false;
+      }
+      visibleCampaigns.push(plain);
+    }
+
+    const encryptedData = encryptData(visibleCampaigns);
 
     res.status(200).json({
       success: true,

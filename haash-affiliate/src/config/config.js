@@ -1,15 +1,19 @@
 let config = {
-  baseURL: "https://affiliate.server.uracca.com/api",
+  baseURL: "https://www.affiliate.server.uracca.com/api",
   apiKey: "",
-  domain: ""
+  domain: "",
 };
 
-export const InitAffiliate = ({ domain, apiKey }) => {
+export const InitAffiliate = ({ domain, apiKey, baseURL }) => {
   if (!domain) throw new Error("domain is required");
   if (!apiKey) throw new Error("apiKey is required");
 
   config.domain = domain;
   config.apiKey = apiKey;
+
+  if (baseURL) {
+    config.baseURL = String(baseURL).replace(/\/$/, "");
+  }
 };
 
 export const getConfig = () => config;

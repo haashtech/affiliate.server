@@ -49,6 +49,38 @@ export const trackAffiliateClick = async (req, res, next) => {
       return res.status(404).json({ message: "Campaign not found" });
     }
 
+    // --- 4️⃣b Pause / inactive gates (no click counting) ---
+    if (user.status !== "APPROVED") {
+      return res.status(403).json({
+        success: false,
+        message: `Affiliate user is ${user.status}; clicks are not tracked`,
+      });
+    }
+
+    if (campaign.status !== "ACTIVE") {
+      return res.status(403).json({
+        success: false,
+        message: `Campaign is ${campaign.status}; clicks are not tracked`,
+      });
+    }
+
+    const campaignProductId = campaign.product?.productId?.toString();
+    if (campaignProductId) {
+      const localProduct = await Product.findOne({
+        productId: campaignProductId,
+      }).select("isActive status");
+
+      if (
+        localProduct &&
+        (localProduct.isActive === false || localProduct.status === "PAUSED")
+      ) {
+        return res.status(403).json({
+          success: false,
+          message: "Product is paused or inactive; clicks are not tracked",
+        });
+      }
+    }
+
     // --- 5️⃣ Increment campaign click count ---
     campaign.clicks = (campaign.clicks || 0) + 1;
     await campaign.save();
@@ -182,8 +214,32 @@ export const purchaseOrderWithAffiliateCampaign = async (req, res, next) => {
       throw new Error("Campaign not found");
     }
 
-    if (campaign.status !== "ACTIVE" && campaign.status !== "PAUSED") {
-      throw new Error(`Campaign is ${campaign.status} and cannot be accessed`);
+    // Paused / inactive campaigns earn nothing (no HOLD commissions)
+    if (campaign.status !== "ACTIVE") {
+      return res.status(403).json({
+        success: false,
+        message: `Campaign is ${campaign.status}; no commission recorded`,
+      });
+    }
+
+    // Campaign product paused/inactive → no order count, no commission, no HOLD
+    const campaignProductIdForGate = campaign.product?.productId?.toString();
+    if (campaignProductIdForGate) {
+      const localCampaignProduct = await Product.findOne({
+        productId: campaignProductIdForGate,
+      }).select("isActive status");
+
+      if (
+        localCampaignProduct &&
+        (localCampaignProduct.isActive === false ||
+          localCampaignProduct.status === "PAUSED")
+      ) {
+        return res.status(403).json({
+          success: false,
+          message:
+            "Campaign product is paused or inactive; no commission recorded",
+        });
+      }
     }
 
     // 5️⃣ Get platform info for that campaign admin
@@ -307,7 +363,7 @@ export const purchaseOrderWithAffiliateCampaign = async (req, res, next) => {
         tdsAmount,
         finalCommission,
         commissionPercent,
-        status: campaign.status === "PAUSED" ? "HOLD" : "PENDING",
+        status: "PENDING",
         createdAt: new Date(),
         // Only commission-eligible lines — cancel of other SKUs is a no-op
         productDetails: commissionProducts.map((p) => ({

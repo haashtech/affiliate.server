@@ -16,7 +16,12 @@ import {
   getUserTierProgressController,
   getAllMyRewardsController,
 } from "../controllers/tier/tier.retrieve.controller.js";
-import { claimUserRewardController, getUserRewardsForTheirAdmins, updateClaimedRewards } from "../controllers/tier/tier.rewards.controller.js";
+import {
+  claimUserRewardController,
+  getUserRewardsForTheirAdmins,
+  updateClaimedRewards,
+} from "../controllers/tier/tier.rewards.controller.js";
+
 const router = express.Router();
 
 // Create Tier
@@ -39,13 +44,14 @@ router.patch(
   toggleAffiliateTierStatusController
 );
 
-//  ==== GET routes can be added here ====
+// ==== GET routes (static paths BEFORE /:tierId) ====
 
 router.get("/all", authenticateAdmin, getAllAffiliateTiersController);
-router.get("/:tierId", authenticateAdmin, getAllAffiliateTiersWithIdController);
-router.get("/user/my-tier", authenticateUser, getUserTierProgressController);
-router.get("/admin/user-tier/:userId", authenticateAdmin, getUserTierProgressController);
 
+// Alias: GET /api/tier/ → list all (avoids 404 from empty-id callers)
+router.get("/", authenticateAdmin, getAllAffiliateTiersController);
+
+router.get("/user/my-tier", authenticateUser, getUserTierProgressController);
 router.get(
   "/user/my-rewards/:id",
   authenticateUser,
@@ -54,16 +60,19 @@ router.get(
 router.get("/user/allMyRewards", authenticateUser, getAllMyRewardsController);
 router.put("/user/claim/reward", authenticateUser, claimUserRewardController);
 
-
-// for admins
+router.get(
+  "/admin/user-tier/:userId",
+  authenticateAdmin,
+  getUserTierProgressController
+);
 router.get("/admin/rewards", authenticateAdmin, getUserRewardsForTheirAdmins);
-//  === update user reward by admin ====
-
 router.patch(
   "/admin/reward/update/:rewardLogId",
   authenticateAdmin,
   updateClaimedRewards
 );
 
+// Single tier by id (must be last among GETs)
+router.get("/:tierId", authenticateAdmin, getAllAffiliateTiersWithIdController);
 
 export default router;

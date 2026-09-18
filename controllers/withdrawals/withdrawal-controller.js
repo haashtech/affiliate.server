@@ -411,6 +411,14 @@ export const processWithdrawal = async (req, res, next) => {
           (finalAmount * platform.onlineTransfer.transferCharge) / 100;
     }
 
+    if (!(finalAmount > 0)) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Withdrawal amount must be greater than 0 after transfer charges.",
+      });
+    }
+    
     // -----------------------------------------------------------
     // ✅ 1. VALIDATE Razorpay before touching wallet or creating withdrawal
     // -----------------------------------------------------------

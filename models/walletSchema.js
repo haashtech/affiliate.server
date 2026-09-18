@@ -22,7 +22,7 @@ const walletSchema = new mongoose.Schema(
 
     transactions: [
       {
-        type: { type: String, enum: ["COMMISSION", "WITHDRAWAL", "REFUND", "RECHARGE"], required: true },
+        type: { type: String, enum: ["COMMISSION", "WITHDRAWAL", "REFUND", "RECHARGE", "REWARD"], required: true },
         refId: { type: mongoose.Schema.Types.ObjectId }, // ref to Commissions, Withdrawals, etc.
         amount: { type: Number, required: true },
         tdsAmount: { type: Number, default: 0 },

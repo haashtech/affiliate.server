@@ -99,8 +99,8 @@ const baseOrigins = [
 // Parse env origins (if any)
 const extraOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(",")
-      .map((o) => o.trim())
-      .filter(Boolean)
+    .map((o) => o.trim())
+    .filter(Boolean)
   : [];
 
 // Merge base + extra (no duplicates)
@@ -135,7 +135,7 @@ app.use(
     },
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     // allowedHeaders: "*",
-    allowedHeaders: ["Content-Type", "Authorization", "x-api-key","x-domain"],
+    allowedHeaders: ["Content-Type", "Authorization", "x-api-key", "x-domain"],
 
 
     credentials: true,
@@ -167,7 +167,7 @@ rateLimitConfig
   });
 
 
-  /* ---------------------- ROUTES ---------------------------- */
+/* ---------------------- ROUTES ---------------------------- */
 app.get("/", (req, res) => res.send("success"));
 
 app.use("/api/user", userRouter);

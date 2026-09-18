@@ -5,8 +5,45 @@ import { createNotification } from "../../utils/createNotification.js";
 import { UserActionEnum, UserCategoryEnum } from "../../models/enum.js";
 import { clean } from "../../helper/json-cleaner.js";
 import { encryptData } from "../../utils/cript-data.js";
-import { MissingFieldError, NotFoundError } from "../../utils/errors.js";
+import {
+  BadRequestError,
+  MissingFieldError,
+  NotFoundError,
+} from "../../utils/errors.js";
 import AffUser from "../../models/aff-user.js";
+import { addCashRewardToWallet } from "../../helper/wallet.js";
+
+const isCashReward = (item) =>
+  item?.rewardType === "CASH" || item?.valueType === "currency";
+
+const assertPaidStatusLock = (previousStatus, nextStatus) => {
+  if (
+    previousStatus === "PAID" &&
+    (nextStatus === "PENDING" || nextStatus === "PROCESSING")
+  ) {
+    throw new BadRequestError(
+      "Paid rewards cannot be changed back to Pending or Processing"
+    );
+  }
+};
+
+const creditCashRewardIfNeeded = async ({
+  item,
+  previousStatus,
+  nextStatus,
+  userId,
+  adminId,
+}) => {
+  if (previousStatus === "PAID" || nextStatus !== "PAID") return;
+  if (!isCashReward(item)) return;
+
+  await addCashRewardToWallet({
+    userId,
+    adminId,
+    rewardId: item._id,
+    amount: item.value,
+  });
+};
 
 export const claimUserRewardController = async (req, res, next) => {
   try {
@@ -231,6 +268,17 @@ export const updateClaimedRewards = async (req, res, next) => {
         throw new NotFoundError("Reward item not found in collectedRewards");
       }
 
+      const previousStatus = rewardItem.status;
+      assertPaidStatusLock(previousStatus, status);
+
+      await creditCashRewardIfNeeded({
+        item: rewardItem,
+        previousStatus,
+        nextStatus: status,
+        userId: log.userId._id,
+        adminId,
+      });
+
       rewardItem.status = status;
 
       if (status === "PAID") {
@@ -254,7 +302,18 @@ export const updateClaimedRewards = async (req, res, next) => {
        CASE 2 → rewardId NOT PROVIDED → update ALL collectedRewards
     -------------------------------------------------------------- */
     if (!rewardId) {
-      log.collectedRewards.forEach((item) => {
+      for (const item of log.collectedRewards) {
+        const previousStatus = item.status;
+        assertPaidStatusLock(previousStatus, status);
+
+        await creditCashRewardIfNeeded({
+          item,
+          previousStatus,
+          nextStatus: status,
+          userId: log.userId._id,
+          adminId,
+        });
+
         item.status = status;
 
         if (status === "PAID") {
@@ -273,7 +332,7 @@ export const updateClaimedRewards = async (req, res, next) => {
           item.collectedAt = new Date();
           item.isCollected = true;
         }
-      });
+      }
     }
 
     /* -------------------------------------------------------------

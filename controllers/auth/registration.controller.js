@@ -22,7 +22,7 @@ const getFileType = (mimetype = "", format = "") => {
   // Excel
   if (
     mimetype ===
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
     mimetype === "application/vnd.ms-excel"
   ) {
     return "excel";
@@ -137,20 +137,6 @@ export const registerAdmin = async (req, res) => {
     // ✅ Check for conflicting domains
     const allDomains = await Domains.find({}, { name: 1, url: 1 });
 
-    // const isConflict = allDomains.some((d) => {
-    //   if (!d.name) return false;
-
-    //   const existingParts = d.name.split(".");
-    //   const newParts = domainName.split(".");
-
-    //   return (
-    //     d.name === domainName ||
-    //     d.name.endsWith(`.${domainName}`) ||
-    //     domainName.endsWith(`.${d.name}`) ||
-    //     existingParts.includes(baseDomain) ||
-    //     newParts.includes(baseDomain)
-    //   );
-    // });
     const isConflict = allDomains.some((d) => {
       if (!d.name) return false;
 
@@ -331,9 +317,8 @@ export const registerUser = async (req, res) => {
       const category = userName;
       const hasSubCategory = Boolean(subCategory?.trim());
 
-      const uploadUrl = `${process.env.MEDIA_SERVER_URL}/upload/${
-        process.env.MEDIA_SERVER_UPLOAD_ORIGIN
-      }/${category}${hasSubCategory ? `/${subCategory}` : ""}`;
+      const uploadUrl = `${process.env.MEDIA_SERVER_URL}/upload/${process.env.MEDIA_SERVER_UPLOAD_ORIGIN
+        }/${category}${hasSubCategory ? `/${subCategory}` : ""}`;
 
       let mediaRes;
       try {
