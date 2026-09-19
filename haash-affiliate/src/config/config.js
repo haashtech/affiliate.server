@@ -1,5 +1,5 @@
 let config = {
-  baseURL: "https://www.affiliate.server.uracca.com/api",
+  baseURL: "https://affiliate.server.uracca.com/api",
   apiKey: "",
   domain: "",
 };

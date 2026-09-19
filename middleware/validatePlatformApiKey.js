@@ -6,6 +6,21 @@ const normalizeOrigin = (url) => {
   return String(url).trim().replace(/\/$/, "").toLowerCase();
 };
 
+const canonicalHost = (value) => {
+  if (!value) return "";
+  try {
+    const withProto = /^https?:\/\//i.test(value) ? value : `https://${value}`;
+    return new URL(withProto).hostname.replace(/^www\./i, "").toLowerCase();
+  } catch {
+    return String(value)
+      .trim()
+      .replace(/^https?:\/\//i, "")
+      .replace(/\/.*$/, "")
+      .replace(/^www\./i, "")
+      .toLowerCase();
+  }
+};
+
 const isLocalHost = (origin) => {
   return origin.includes("localhost") || origin.includes("127.0.0.1");
 };
@@ -26,7 +41,6 @@ export const validatePlatformApiKey = async (req, res, next) => {
     }
 
     const cleanHeaderDomain = normalizeOrigin(domain);
-    const cleanDbDomain = normalizeOrigin(platform.domain);
     const cleanOrigin = normalizeOrigin(origin);
 
     if (
@@ -37,11 +51,10 @@ export const validatePlatformApiKey = async (req, res, next) => {
       return next();
     }
 
-    if (cleanHeaderDomain !== cleanDbDomain) {
-      throw new InvalidError("Domain mismatch");
-    }
-
-    if (cleanOrigin && cleanOrigin !== cleanDbDomain) {
+    // x-domain identifies the NpmPackage tenant (www / trailing-slash insensitive).
+    // Browser Origin is enforced by CORS, not here — storefront host can differ
+    // from the package canonical domain (e.g. www.example.uracca.in vs example.uracca.com).
+    if (canonicalHost(domain) !== canonicalHost(platform.domain)) {
       throw new InvalidError("Domain mismatch");
     }
 

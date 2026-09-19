@@ -94,6 +94,9 @@ const baseOrigins = [
   "https://example.admin.uracca.com",
   "https://example.admin.uracca.in",
   "https://example.uracca.in",
+  "https://www.example.uracca.in",
+  "https://example.uracca.com",
+  "https://www.example.uracca.com",
 ];
 
 // Parse env origins (if any)
@@ -119,14 +122,28 @@ const isTenantAdminOrigin = (origin) => {
   }
 };
 
+const wwwAliasOrigin = (origin) => {
+  try {
+    const u = new URL(origin);
+    const host = u.hostname;
+    const altHost = host.startsWith("www.") ? host.slice(4) : `www.${host}`;
+    return `${u.protocol}//${altHost}`;
+  } catch {
+    return "";
+  }
+};
+
+const isAllowedOrigin = (origin) => {
+  if (!origin) return true;
+  if (allowedOrigins.includes(origin) || isTenantAdminOrigin(origin)) return true;
+  const alias = wwwAliasOrigin(origin);
+  return Boolean(alias && allowedOrigins.includes(alias));
+};
+
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (
-        !origin ||
-        allowedOrigins.includes(origin) ||
-        isTenantAdminOrigin(origin)
-      ) {
+      if (isAllowedOrigin(origin)) {
         callback(null, true);
       } else {
         console.log("❌ Blocked Origin:", origin);
