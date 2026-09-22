@@ -84,7 +84,10 @@ export const getAndValidatePlatformProducts = async (
       (p) => p.productId?.toString() === productId.toString()
     );
 
-    const localProduct = await Product.findOne({ productId });
+    const localProduct = await Product.findOne({
+      productId,
+      domain: platformDomain,
+    });
 
     if (localProduct) {
       if (localProduct.domain !== platformDomain) {
