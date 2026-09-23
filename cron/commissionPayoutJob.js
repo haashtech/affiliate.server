@@ -5,7 +5,7 @@ import { createCommissionNotifications } from "../utils/createCommissionNotifica
 import { addCommissionToWallet } from "../helper/wallet.js";
 import { DailyActionUpdater } from "../utils/recordAction.js";
 
-cron.schedule("0 0 * * *", async () => {
+cron.schedule("* * * * *", async () => {
   console.log("🔄 Running commission payout job...");
 
   try {

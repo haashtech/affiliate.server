@@ -314,17 +314,23 @@ export const purchaseOrderWithAffiliateCampaign = async (req, res, next) => {
     let commissionPercent = 0;
 
     if (user?.affType?.commission > 0) {
-      commissionPercent = user.affType.commission;
+      commissionPercent = Number(user.affType.commission);
     } else {
       for (const product of commissionProducts) {
-        if (product?.commission > 0) {
-          commissionPercent = product.commission;
+        const fromAffiliateProduct = Number(product?.localRef?.commission);
+        if (fromAffiliateProduct > 0) {
+          commissionPercent = fromAffiliateProduct;
+          break;
+        }
+        const fromShopSpread = Number(product?.commission);
+        if (fromShopSpread > 0) {
+          commissionPercent = fromShopSpread;
           break;
         }
       }
 
       if (commissionPercent === 0) {
-        commissionPercent = platform.commission ?? 0;
+        commissionPercent = Number(platform.commission) || 0;
       }
     }
 

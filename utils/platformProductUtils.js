@@ -1,62 +1,9 @@
-// import axios from "axios";
-// import { Product } from "../models/productSchema.js";
-
-// /**
-//  * Fetches platform products and validates product activity status.
-//  * 
-//  * - If local product exists → must have correct domain + active status
-//  * - If local product does not exist → still treated as valid
-//  */
-// export const getAndValidatePlatformProducts = async (
-//   backendUrl,
-//   productIdsArray,
-//   platformDomain
-// ) => {
-//   const validProducts = [];
-//   const blockedProducts = [];
-
-//   let platformProducts = [];
-//   try {
-//     const response = await axios.get(backendUrl);
-//     platformProducts = response.data?.data || response.data || [];
-//   } catch (err) {
-//     console.warn("⚠️ Platform fetch failed (skipped sync check):", err.message);
-//   }
-
-//   for (const id of productIdsArray) {
-//     // Find product from platform response (optional context)
-//     const foundInPlatform = platformProducts.find(
-//       (p) => p.productId?.toString() === id.toString()
-//     );
-
-//     // Check local DB version (if it exists)
-//     const localProduct = await Product.findOne({ productId: id });
-
-//     if (localProduct) {
-//       if (localProduct.domain !== platformDomain) {
-//         blockedProducts.push({ productId: id, reason: "Product domain mismatch" });
-//         continue;
-//       }
-
-//       if (!localProduct.isActive || localProduct.status === "PAUSED") {
-//         blockedProducts.push({ productId: id, reason: "Product inactive or paused" });
-//         continue;
-//       }
-//     }
-
-//     // ✅ Always add if passed checks (even if not found in local DB)
-//     validProducts.push(foundInPlatform || { productId: id, localRef: localProduct });
-//   }
-
-//   return { validProducts, blockedProducts };
-// };
-
 import { Product } from "../models/productSchema.js";
 import { fetchPlatformProducts } from "./fetchPlatformProducts.js";
 
 /**
  * Fetches platform products and validates product activity status.
- * 
+ *
  * - Takes productDetails [{ productId, productAmount }]
  * - Only blocks if local product exists but is inactive/paused or mismatched domain
  * - Returns valid products + total valid productAmount
@@ -84,13 +31,19 @@ export const getAndValidatePlatformProducts = async (
       (p) => p.productId?.toString() === productId.toString()
     );
 
-    const localProduct = await Product.findOne({
+    // Prefer the platform's own row; productId is globally unique so a
+    // miss can still resolve the shared affiliate Product (e.g. Example).
+    let localProduct = await Product.findOne({
       productId,
       domain: platformDomain,
     });
+    const foundByExactDomain = Boolean(localProduct);
+    if (!localProduct) {
+      localProduct = await Product.findOne({ productId });
+    }
 
     if (localProduct) {
-      if (localProduct.domain !== platformDomain) {
+      if (foundByExactDomain && localProduct.domain !== platformDomain) {
         blockedProducts.push({ productId, reason: "Product domain mismatch" });
         continue;
       }
