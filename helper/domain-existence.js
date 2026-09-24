@@ -18,3 +18,31 @@ export const ExtractDomainParts = (fullUrl) => {
   const base = parts.length >= 2 ? parts[parts.length - 2] : hostname;
   return { name, base };
 };
+
+/** Hostname without www / trailing dot, including TLD. */
+export const normalizeStoreHostname = (fullUrl) => {
+  const hostname = new URL(fullUrl).hostname.replace(/^www\./i, "").toLowerCase();
+  return hostname.replace(/\.$/, "");
+};
+
+/**
+ * Same host or subdomain of the same host+TLD.
+ * uracca.com vs www.uracca.com / shop.uracca.com → conflict
+ * uracca.com vs example.uracca.in → no conflict
+ */
+export const storeHostsConflict = (newUrl, existingUrl) => {
+  if (!newUrl || !existingUrl) return false;
+  let newHost;
+  let existingHost;
+  try {
+    newHost = normalizeStoreHostname(newUrl);
+    existingHost = normalizeStoreHostname(existingUrl);
+  } catch {
+    return false;
+  }
+  return (
+    existingHost === newHost ||
+    existingHost.endsWith("." + newHost) ||
+    newHost.endsWith("." + existingHost)
+  );
+};

@@ -105,6 +105,13 @@ export const loginUser = async (req, res, next) => {
         .json({ success: false, message: "User has been blocked" });
     }
 
+    if (!user.registrationVerified) {
+      return res.status(403).json({
+        success: false,
+        message: "Please complete OTP verification before logging in",
+      });
+    }
+
     // Compare passwords
     const isPassMatch = await bcrypt.compare(password, user.password);
     if (!isPassMatch) {

@@ -36,6 +36,14 @@ export const
           .json({ success: false, message: "User not found" });
       }
 
+      if (status === "APPROVED" && !user.registrationVerified) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "This application is incomplete. The user has not verified OTP.",
+        });
+      }
+
       if (!user.affType) {
         user.affType = {};
       }

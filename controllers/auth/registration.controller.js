@@ -7,11 +7,10 @@ import FormData from "form-data"; // ✅ THIS ONE
 
 import axios from "axios";
 import bcrypt from "bcryptjs";
-import { ExtractDomainParts } from "../../helper/domain-existence.js";
+import { ExtractDomainParts, storeHostsConflict } from "../../helper/domain-existence.js";
 import Domains from "../../models/domainSchema.js";
 import { Referring } from "../../models/referringPeopleSchema.js";
-import { UserActionEnum, UserCategoryEnum } from "../../models/enum.js";
-import { notifyAllSuperAdmins } from "../../utils/notifyAdmin.js";
+import { resolveAffiliateRegistrationDraft } from "../../utils/affiliateRegistrationDraft.js";
 
 const getFileType = (mimetype = "", format = "") => {
   if (mimetype.startsWith("image/")) return "image";
@@ -131,26 +130,12 @@ export const registerAdmin = async (req, res) => {
     }
 
     // ✅ Extract domain parts
-    const { name: domainName, base: baseDomain } =
-      ExtractDomainParts(domainUrl);
+    const { name: domainName } = ExtractDomainParts(domainUrl);
 
-    // ✅ Check for conflicting domains
+    // Full host + TLD: uracca.com vs shop.uracca.com conflict;
+    // uracca.com vs example.uracca.in do not (different host/TLD).
     const allDomains = await Domains.find({}, { name: 1, url: 1 });
-
-    const isConflict = allDomains.some((d) => {
-      if (!d.name) return false;
-
-      const existing = d.name; // stored: admin.uracca or uracca
-      const newDomain = domainName; // extracted from input
-      const sameBase = baseDomain === existing.split(".").slice(-1)[0];
-
-      return (
-        existing === newDomain || // exact match
-        existing.endsWith("." + newDomain) || // existing is subdomain of new
-        newDomain.endsWith("." + existing) || // new is subdomain of existing
-        sameBase // share same base domain
-      );
-    });
+    const isConflict = allDomains.some((d) => storeHostsConflict(domainUrl, d.url));
 
     if (isConflict) {
       return res.status(400).json({
@@ -259,14 +244,16 @@ export const registerUser = async (req, res) => {
     const files = req.files || [];
 
     /* ------------------------------------------------
-       3️⃣ Check existing user
+       3️⃣ Incomplete OTP signups are drafts — reuse them
     ------------------------------------------------ */
-    const existing = await AffUser.findOne({
-      $or: [{ email }, { mobile }],
-    });
+    const { draftUser, error: registrationConflict } =
+      await resolveAffiliateRegistrationDraft({ email, mobile });
 
-    if (existing) {
-      return res.status(409).json({ message: "User already exists" });
+    if (registrationConflict) {
+      return res.status(registrationConflict.status).json({
+        message: registrationConflict.message,
+        field: registrationConflict.field,
+      });
     }
 
     /* ------------------------------------------------
@@ -351,71 +338,66 @@ export const registerUser = async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     /* ------------------------------------------------
-       6️⃣ Referral logic
+       6️⃣ Create or update unverified draft
     ------------------------------------------------ */
+    let newUser;
     let parentUser = null;
 
-    if (referralId) {
-      parentUser = await AffUser.findOne({ referralId });
+    if (draftUser) {
+      draftUser.userName = userName;
+      draftUser.fullName = fullName;
+      draftUser.email = email;
+      draftUser.mobile = mobile;
+      draftUser.panNumber = panNumber;
+      draftUser.address = [address];
+      draftUser.social = social;
+      draftUser.password = hashedPassword;
+      if (documentsForDB.length) {
+        draftUser.documents = documentsForDB;
+      }
+      draftUser.status = "PENDING";
+      draftUser.registrationVerified = false;
+      newUser = await draftUser.save();
+    } else {
+      if (referralId) {
+        parentUser = await AffUser.findOne({ referralId });
+        if (parentUser) {
+          parentUser.referralCount += 1;
+          await parentUser.save();
+        }
+      }
+
+      newUser = await AffUser.create({
+        userName,
+        fullName,
+        email,
+        mobile,
+        panNumber,
+        address: [address],
+        social,
+        password: hashedPassword,
+        documents: documentsForDB,
+      });
+
       if (parentUser) {
-        parentUser.referralCount += 1;
-        await parentUser.save();
+        await Referring.create({
+          parentUser: parentUser._id,
+          childUser: newUser._id,
+          referralCode: referralId,
+          level: 1,
+        });
       }
     }
 
     /* ------------------------------------------------
-       7️⃣ Create user
+       7️⃣ Send OTP — admin is notified only after verify
     ------------------------------------------------ */
-    const newUser = await AffUser.create({
-      userName,
-      fullName,
-      email,
-      mobile,
-      panNumber,
-      address: [address],
-      social,
-      password: hashedPassword,
-      documents: documentsForDB,
-    });
-
-    /* ------------------------------------------------
-       8️⃣ Save referral chain
-    ------------------------------------------------ */
-    if (parentUser) {
-      await Referring.create({
-        parentUser: parentUser._id,
-        childUser: newUser._id,
-        referralCode: referralId,
-        level: 1,
-      });
-    }
-
-    /* ------------------------------------------------
-       🔔 Notify SUPER_ADMINs (admin inbox = their own user id)
-    ------------------------------------------------ */
-    const displayName = fullName || userName || email || "A new affiliate";
-    await notifyAllSuperAdmins({
-      action: UserActionEnum.NEW_USER,
-      category: UserCategoryEnum.REGISTRATION,
-      message: referralId
-        ? `${displayName} registered with referral ${referralId}`
-        : `${displayName} submitted an affiliate application`,
-      metadata: {
-        userId: newUser._id,
-        referredBy: parentUser?._id || null,
-      },
-    });
-
-    /* ------------------------------------------------
-       9️⃣ Send OTP (after user is saved)
-    ------------------------------------------------ */
-    let otp;
     try {
-      otp = await handleOtpSending(mobile);
+      const otp = await handleOtpSending(mobile);
       if (!otp) {
         return res.status(400).json({
           message:
-            "User created but OTP could not be sent. Please use resend OTP.",
+            "Registration saved. OTP could not be sent. Please check the mobile number and resend OTP.",
           user: {
             id: newUser._id,
             email: newUser.email,
@@ -425,13 +407,14 @@ export const registerUser = async (req, res) => {
       }
 
       newUser.otp = otp;
+      newUser.otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
       await newUser.save();
     } catch (otpErr) {
       console.error("OTP SEND ERROR:", otpErr);
       return res.status(400).json({
         message:
           otpErr.message ||
-          "User created but OTP failed to send. Please use resend OTP.",
+          "Registration saved. OTP failed to send. Please resend OTP.",
         user: {
           id: newUser._id,
           email: newUser.email,
@@ -440,9 +423,6 @@ export const registerUser = async (req, res) => {
       });
     }
 
-    /* ------------------------------------------------
-       ✅ Success
-    ------------------------------------------------ */
     return res.status(201).json({
       message: "User registered successfully. OTP sent.",
       user: {

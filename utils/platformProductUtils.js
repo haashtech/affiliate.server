@@ -31,19 +31,10 @@ export const getAndValidatePlatformProducts = async (
       (p) => p.productId?.toString() === productId.toString()
     );
 
-    // Prefer the platform's own row; productId is globally unique so a
-    // miss can still resolve the shared affiliate Product (e.g. Example).
-    let localProduct = await Product.findOne({
-      productId,
-      domain: platformDomain,
-    });
-    const foundByExactDomain = Boolean(localProduct);
-    if (!localProduct) {
-      localProduct = await Product.findOne({ productId });
-    }
+    const localProduct = await Product.findOne({productId});
 
     if (localProduct) {
-      if (foundByExactDomain && localProduct.domain !== platformDomain) {
+      if (localProduct.domain !== platformDomain) {
         blockedProducts.push({ productId, reason: "Product domain mismatch" });
         continue;
       }

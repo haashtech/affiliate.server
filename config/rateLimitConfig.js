@@ -30,16 +30,11 @@ export const rateLimitConfig = [
   },
   {
     route: "/api/affiliate",
-    // window: "1h",
-    // max: 100,
-    // method: "POST",
     noLimit: true,
   },
   {
     route: "/api/wallet",
     noLimit: true,
-    //   window: "1h",
-    //   max: 60,
   },
   {
     route: "/api/web-hook",

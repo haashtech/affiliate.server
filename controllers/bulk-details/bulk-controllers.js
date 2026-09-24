@@ -165,7 +165,9 @@ export const bulkDataController = async (req, res, next) => {
     let pendingApplications = 0;
     if (currentAdminType === "SUPER_ADMIN") {
       pendingApplications = allUsers.filter(
-        (u) => u.status === "PENDING"
+        (u) =>
+          u.status === "PENDING" &&
+          (u.userType !== "USER" || u.registrationVerified === true)
       ).length;
     }
     // const pendingApplications = allUsers.filter(

@@ -92,6 +92,19 @@ export const getAllAffUsersForEachAdmins = async (req, res) => {
 
     const isSingleUserRequest = Boolean(filters._id);
 
+    // Incomplete OTP signups are not applications yet
+    if (!isSingleUserRequest) {
+      filters.$and = [
+        ...(filters.$and || []),
+        {
+          $or: [
+            { userType: { $ne: "USER" } },
+            { registrationVerified: true },
+          ],
+        },
+      ];
+    }
+
     /* ----------------------------------------
        2️⃣ SINGLE USER FETCH (🔥 IMPORTANT)
     ---------------------------------------- */
