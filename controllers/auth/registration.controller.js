@@ -7,7 +7,7 @@ import FormData from "form-data"; // ✅ THIS ONE
 
 import axios from "axios";
 import bcrypt from "bcryptjs";
-import { ExtractDomainParts, storeHostsConflict } from "../../helper/domain-existence.js";
+import { ExtractDomainParts, normalizeStoreUrl, storeHostsConflict } from "../../helper/domain-existence.js";
 import Domains from "../../models/domainSchema.js";
 import { Referring } from "../../models/referringPeopleSchema.js";
 import { resolveAffiliateRegistrationDraft } from "../../utils/affiliateRegistrationDraft.js";
@@ -70,7 +70,8 @@ const mapUploadedDocument = (mediaFile, originalFile) => {
 
 export const registerAdmin = async (req, res) => {
   try {
-    const { mobile, password, email, domain: domainUrl, type } = req.body;
+    const { mobile, password, email, domain: rawDomainUrl, type } = req.body;
+    const domainUrl = normalizeStoreUrl(rawDomainUrl);
 
     let userType = type || "ADMIN";
 

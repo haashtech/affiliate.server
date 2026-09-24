@@ -19,6 +19,20 @@ export const ExtractDomainParts = (fullUrl) => {
   return { name, base };
 };
 
+/** Canonical store URL: trim and drop a trailing slash. Host is unchanged. */
+export const normalizeStoreUrl = (value) => {
+  if (!value || typeof value !== "string") return "";
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  try {
+    const parsed = new URL(trimmed);
+    const path = parsed.pathname.replace(/\/+$/, "");
+    return `${parsed.protocol}//${parsed.host}${path}${parsed.search}`;
+  } catch {
+    return trimmed.replace(/\/+$/, "");
+  }
+};
+
 /** Hostname without www / trailing dot, including TLD. */
 export const normalizeStoreHostname = (fullUrl) => {
   const hostname = new URL(fullUrl).hostname.replace(/^www\./i, "").toLowerCase();

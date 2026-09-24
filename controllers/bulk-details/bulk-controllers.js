@@ -11,6 +11,7 @@ import { Product } from "../../models/productSchema.js";
 import { Wallet } from "../../models/walletSchema.js";
 import Withdrawals from "../../models/withdrawalSchema.js";
 import { encryptData } from "../../utils/cript-data.js";
+import { normalizeStoreUrl } from "../../helper/domain-existence.js";
 import { clean } from "../../helper/json-cleaner.js";
 import DailyAction from "../../models/actionSchema.js";
 import { NotFoundError } from "../../utils/errors.js";
@@ -78,7 +79,15 @@ export const bulkDataController = async (req, res, next) => {
       // Get internal products for this admin's domain
       const adminDomain = await Domains.findOne({ registeredUserId: adminId });
       const internalProducts = adminDomain
-        ? await Product.find({ domain: adminDomain.url, isActive: true })
+        ? await Product.find({
+            domain: {
+              $in: [
+                normalizeStoreUrl(adminDomain.url),
+                `${normalizeStoreUrl(adminDomain.url)}/`,
+              ],
+            },
+            isActive: true,
+          })
         : [];
 
       // Convert internal products to a map for fast lookup

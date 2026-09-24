@@ -1,3 +1,4 @@
+import { normalizeStoreUrl } from "../helper/domain-existence.js";
 import { Product } from "../models/productSchema.js";
 import { fetchPlatformProducts } from "./fetchPlatformProducts.js";
 
@@ -34,7 +35,10 @@ export const getAndValidatePlatformProducts = async (
     const localProduct = await Product.findOne({productId});
 
     if (localProduct) {
-      if (localProduct.domain !== platformDomain) {
+      if (
+        normalizeStoreUrl(localProduct.domain) !==
+        normalizeStoreUrl(platformDomain)
+      ) {
         blockedProducts.push({ productId, reason: "Product domain mismatch" });
         continue;
       }

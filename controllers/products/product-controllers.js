@@ -1,6 +1,8 @@
+import { normalizeStoreUrl } from "../../helper/domain-existence.js";
 import { Campaign } from "../../models/campaignSchema.js";
 import { Platform } from "../../models/platformSchema.js";
 import { Product } from "../../models/productSchema.js";
+import { upsertAffiliateProduct } from "../../utils/affiliateProductDomain.js";
 import { fetchPlatformProducts } from "../../utils/fetchPlatformProducts.js";
 /**
  * @desc Get all products (optionally filtered by domain/status)
@@ -10,7 +12,10 @@ export const getProductsFromDb = async (req, res) => {
   try {
     const { domain, status } = req.query;
     const filter = {};
-    if (domain) filter.domain = domain;
+    const normalizedDomain = normalizeStoreUrl(domain);
+    if (normalizedDomain) {
+      filter.domain = { $in: [normalizedDomain, `${normalizedDomain}/`] };
+    }
     if (status) filter.status = status;
 
     const products = await Product.find(filter).sort({ createdAt: -1 });
@@ -61,14 +66,8 @@ export const updateProductsToDb = async (req, res) => {
       const { productId, domain, ...fields } = prod;
 
       if (productId && domain) {
-        // update specific product
-        await Product.findOneAndUpdate(
-          { productId, domain },
-          { $set: fields },
-          { upsert: true, new: true }
-        );
+        await upsertAffiliateProduct({ productId, domain, fields });
       } else {
-        // update all products
         await Product.updateMany({}, { $set: fields });
       }
     }

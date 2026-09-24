@@ -1,4 +1,4 @@
-import { ExtractDomainParts } from "../../helper/domain-existence.js";
+import { ExtractDomainParts, normalizeStoreUrl } from "../../helper/domain-existence.js";
 import { NpmPackage } from "../../models/npmSchema.js";
 import { Platform } from "../../models/platformSchema.js";
 import { generateApiKey } from "../../utils/generateApiKey.js";
@@ -121,6 +121,9 @@ export const getPlatformForUserSettings = async (req, res) => {
 export const updatePlatformSettings = async (req, res, next) => {
   try {
     const { updateFields } = req.body;
+    if (updateFields?.domain) {
+      updateFields.domain = normalizeStoreUrl(updateFields.domain);
+    }
     const adminId = req.admin._id;
     // Always update the first Platform document
     let platform = await Platform.findOne({ adminId });

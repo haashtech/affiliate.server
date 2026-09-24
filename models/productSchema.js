@@ -36,7 +36,7 @@ const variationSchema = new mongoose.Schema({
 const productSchema = new mongoose.Schema(
   {
     domain: { type: String, required: true },
-    productId: { type: String, required: true, unique: true },
+    productId: { type: String, required: true },
     productName: { type: String, required: true },
     mrp: { type: Number, required: true },
     category: { type: String },
@@ -47,6 +47,8 @@ const productSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+productSchema.index({ productId: 1, domain: 1 }, { unique: true });
 
 export const Product =
   mongoose.models.Product || mongoose.model("Product", productSchema);
