@@ -185,6 +185,14 @@ const userSchema = new mongoose.Schema(
       balanceAmount: { type: Number, default: 0 },
     },
 
+    // Per-product commission overrides for this affiliate user only
+    productCommissions: [
+      {
+        productId: { type: String, required: true },
+        commission: { type: Number, required: true, min: 0, max: 100 },
+      },
+    ],
+
     withdrawalDetails: {
       bank: {
         accountHolderName: { type: String, default: "" },

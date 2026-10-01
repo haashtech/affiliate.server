@@ -310,29 +310,79 @@ export const purchaseOrderWithAffiliateCampaign = async (req, res, next) => {
 
     // ----------------------------------------------------------------
     // 🧩 Step C: Determine Commission %
+    // Priority: user productCommissions → affType.commission → domain product → platform
     // ----------------------------------------------------------------
     let commissionPercent = 0;
+    let commissionSource = null;
+    let commissionSourceProductId = null;
 
-    if (user?.affType?.commission > 0) {
+    const userProductCommissions = Array.isArray(user?.productCommissions)
+      ? user.productCommissions
+      : [];
+
+    const findUserProductOverride = (productId) => {
+      if (!productId) return null;
+      const pid = productId.toString();
+      const override = userProductCommissions.find(
+        (entry) => entry?.productId?.toString() === pid
+      );
+      if (!override) return null;
+      const value = Number(override.commission);
+      if (Number.isNaN(value)) return null;
+      return { productId: pid, commission: value };
+    };
+
+    // Prefer campaign product override, then any other eligible line
+    let matchedOverride = findUserProductOverride(campaignProductId);
+    if (!matchedOverride) {
+      for (const product of commissionProducts) {
+        matchedOverride = findUserProductOverride(product?.productId);
+        if (matchedOverride) break;
+      }
+    }
+
+    if (matchedOverride) {
+      commissionPercent = matchedOverride.commission;
+      commissionSource = "productCommissions";
+      commissionSourceProductId = matchedOverride.productId;
+    } else if (user?.affType?.commission > 0) {
       commissionPercent = Number(user.affType.commission);
+      commissionSource = "affType";
     } else {
       for (const product of commissionProducts) {
         const fromAffiliateProduct = Number(product?.localRef?.commission);
         if (fromAffiliateProduct > 0) {
           commissionPercent = fromAffiliateProduct;
+          commissionSource = "domainProduct";
+          commissionSourceProductId = product?.productId?.toString() ?? null;
           break;
         }
         const fromShopSpread = Number(product?.commission);
         if (fromShopSpread > 0) {
           commissionPercent = fromShopSpread;
+          commissionSource = "domainProduct";
+          commissionSourceProductId = product?.productId?.toString() ?? null;
           break;
         }
       }
 
       if (commissionPercent === 0) {
         commissionPercent = Number(platform.commission) || 0;
+        if (commissionPercent > 0) {
+          commissionSource = "platform";
+        }
       }
     }
+
+    console.log("[affiliate] commission percent resolved", {
+      orderId,
+      referralId,
+      commissionSource,
+      commissionSourceProductId,
+      commissionPercent,
+      affTypeCommission: user?.affType?.commission ?? 0,
+      productCommissionOverrides: userProductCommissions.length,
+    });
 
     if (commissionPercent <= 0) {
       throw new Error("No commission defined for this order");

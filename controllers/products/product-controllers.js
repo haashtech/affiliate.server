@@ -277,20 +277,29 @@ export const getProductsForUsersFromDb = async (req, res) => {
       })
       .map((external) => {
         const local = localProductMap.get(external._id?.toString());
+        const productId = external._id?.toString();
+
+        // Priority: productCommissions → affType.commission → domain product → platform
+        const userProductCommissions = Array.isArray(user?.productCommissions)
+          ? user.productCommissions
+          : [];
+        const productOverride = userProductCommissions.find(
+          (entry) => entry?.productId?.toString() === productId
+        );
 
         let commission = platformCommission;
 
-        // 🔥 RULE 1: NON-INDIVIDUAL USERS
-        if (userAffType?.type !== "INDIVIDUAL") {
-          commission = userAffType?.commission ?? platformCommission;
-        }
-        // 🔥 RULE 2: INDIVIDUAL USERS
-        else {
-          if (local?.commission && local.commission > 0) {
-            commission = local.commission;
-          } else {
-            commission = platformCommission;
-          }
+        if (
+          productOverride != null &&
+          !Number.isNaN(Number(productOverride.commission))
+        ) {
+          commission = Number(productOverride.commission);
+        } else if (Number(userAffType?.commission) > 0) {
+          commission = Number(userAffType.commission);
+        } else if (local?.commission && local.commission > 0) {
+          commission = local.commission;
+        } else {
+          commission = platformCommission;
         }
 
         return {
